@@ -269,7 +269,8 @@ UggFbSetMode (
   return (ModeNumber == 0) ? EFI_SUCCESS : EFI_UNSUPPORTED;
 }
 
-STATIC EFI_STATUS
+/* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
+EFI_STATUS
 EFIAPI
 UggFbDxeInitialize (
   IN EFI_HANDLE        ImageHandle,
