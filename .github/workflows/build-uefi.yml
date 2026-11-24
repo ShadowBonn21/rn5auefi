@@ -68,6 +68,9 @@ jobs:
       - name: Минимальный пролог PrePi (фикс для ugg)
         run: python fw/patches/minimal_prepi_entry.py em
 
+      - name: Отключить вывод DebugLib в framebuffer (24bpp!)
+        run: python fw/patches/quiet_debug.py em
+
       - name: Метки внутри BDS
         run: python fw/patches/paint_bds.py em
 

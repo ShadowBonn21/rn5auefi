@@ -58,6 +58,7 @@ MsmPaintBand (
 # (якорь, метка, ставить ДО якоря?)
 HOOKS = [
     ("  HotkeyTriggered = NULL;", 1, True),
+    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 6, False),
     ("  BdsFormalizeEfiGlobalVariable ();", 2, False),
     ("  PlatformBootManagerBeforeConsole ();", 3, True),
     ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 4, False),
