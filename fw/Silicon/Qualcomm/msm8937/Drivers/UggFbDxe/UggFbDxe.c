@@ -45,9 +45,18 @@ typedef struct {
 } UGG_FB;
 
 STATIC UGG_FB  mUggFb;
-STATIC UINT8   mDummyDevicePath[] = {
-  0x02, 0x01, 0x0C, 0x00,              /* ACPI DP: HID = ... */
-  0x41, 0x43, 0x50, 0x49, 0x5F, 0x46, 0x42, 0x30, 0x30, 0x30, 0x30, 0x00,
+/*
+  Device path для GOP-хэндла: узел ACPI (Type 0x02, SubType 0x01).
+
+  ВНИМАНИЕ: раньше здесь был узел с Length = 0x0C, хотя ACPI-узел занимает
+  16 байт (заголовок 4 + HID 8 + UID 4). Неверная длина ломала разбор
+  device path: InstallMultipleProtocolInterfaces не возвращался, GOP не
+  устанавливался, и BDS навсегда оставался с чёрным экраном.
+*/
+STATIC UINT8  mFbDevicePath[] = {
+  0x02, 0x01, 0x10, 0x00,              /* Type=ACPI(0x02) SubType=ACPI(0x01) Len=16 */
+  'A', 'C', 'P', 'I', '_', 'F', 'B', '0',   /* HID, 8 байт */
+  0x00, 0x00, 0x00, 0x00,              /* UID */
   0x7F, 0xFF, 0x04, 0x00               /* End of Device Path */
 };
 
@@ -319,29 +328,28 @@ UggFbDxeInitialize (
   /* Экран чистый: иначе на нём останется сплэш LK под текстом консоли. */
   FbFillRect (0, 0, Width, Height, &Black);
 
-  /*
-    Отладочная метка: полоса на 1200-й строке ПОСЛЕ установки GOP.
-    Видна => драйвер дошёл до конца инициализации (GOP установлен).
-    Убрать вместе с fw/patches/paint_stages.py, когда UEFI заработает.
-  */
-
-
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &Handle,
                   &gEfiGraphicsOutputProtocolGuid,
                   &mUggFb.Gop,
                   &gEfiDevicePathProtocolGuid,
-                  (EFI_DEVICE_PATH_PROTOCOL *)mDummyDevicePath,
+                  (EFI_DEVICE_PATH_PROTOCOL *)mFbDevicePath,
                   NULL
                   );
-  ASSERT_EFI_ERROR (Status);
-
-  /* метка: дошли до конца, GOP установлен */
+  /*
+    Метки: 1200 — GOP установлен; 1100 — установка НЕ удалась.
+    Убрать вместе с PcdDebugStageBands, когда UEFI заработает.
+  */
   if (FixedPcdGet32 (PcdDebugStageBands) != 0) {
     EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
 
-    FbFillRect (0, 1200, Width, 40, &White);
+    if (EFI_ERROR (Status)) {
+      FbFillRect (0, 1100, Width, 40, &White);
+    } else {
+      FbFillRect (0, 1200, Width, 40, &White);
+    }
   }
 
+  ASSERT_EFI_ERROR (Status);
   return Status;
 }
