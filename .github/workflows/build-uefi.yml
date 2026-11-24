@@ -71,6 +71,9 @@ jobs:
       - name: Покраска стадий PrePi (отладка без UART)
         run: python fw/patches/paint_stages.py em
 
+      - name: Метки внутри BDS
+        run: python fw/patches/paint_bds.py em
+
       - name: Сборка UEFI
         run: |
           cd em
