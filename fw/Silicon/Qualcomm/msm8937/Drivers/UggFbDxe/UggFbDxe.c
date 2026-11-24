@@ -320,15 +320,11 @@ UggFbDxeInitialize (
   FbFillRect (0, 0, Width, Height, &Black);
 
   /*
-    Отладочная метка: белая полоса на 50-й строке (GOP установлен).
+    Отладочная метка: полоса на 1200-й строке ПОСЛЕ установки GOP.
     Видна => драйвер дошёл до конца инициализации (GOP установлен).
     Убрать вместе с fw/patches/paint_stages.py, когда UEFI заработает.
   */
-  if (FixedPcdGet32 (PcdDebugStageBands) != 0) {
-    EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
 
-    FbFillRect (0, 50, Width, 40, &White);
-  }
 
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &Handle,
@@ -339,5 +335,13 @@ UggFbDxeInitialize (
                   NULL
                   );
   ASSERT_EFI_ERROR (Status);
+
+  /* метка: дошли до конца, GOP установлен */
+  if (FixedPcdGet32 (PcdDebugStageBands) != 0) {
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
+
+    FbFillRect (0, 1200, Width, 40, &White);
+  }
+
   return Status;
 }

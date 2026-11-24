@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — метки внутри BdsDxe (Common/edk2), чтобы найти точку падения BDS.
+paint_bds.py — «прогресс-бар» внутри BdsDxe: высота белой области = стадия.
 
-ВАЖНО: BdsDxe имеет Depex = TRUE и отрабатывает РАНЬШЕ нашего драйвера дисплея,
-поэтому любые метки, нарисованные до очистки экрана, стираются. Здесь метки
-ставятся внутри BdsEntry — они рисуются уже после UggFbDxe и остаются видны.
+Почему так: отдельные полосы близко по высоте и их легко спутать. Здесь каждая
+пройденная стадия «докрашивает» область сверху вниз до новой высоты, поэтому
+достаточно посмотреть, ДО КУДА белое — и всё понятно без счёта.
 
-Полосы (24bpp, stride 2160, база 0x90000000-256):
-    1 — первая строка BdsEntry            (строка ~100)
-    2 — после BdsFormalizeEfiGlobalVariable (~200)
-    3 — перед PlatformBootManagerBeforeConsole (~300)
-    4 — после BeforeConsole               (~400)
-    5 — после PlatformBootManagerAfterConsole (~500)
+Высоты (строки из 1280, 24bpp stride 2160, база 0x90000000-256):
+    150 — BdsEntry начался
+    300 — строка DEBUG("[Bds] Entry...") пройдена
+    450 — BdsFormalizeEfiGlobalVariable() пройдена
+    600 — перед PlatformBootManagerBeforeConsole()
+    750 — BeforeConsole вернулся
+    900 — AfterConsole вернулся
 
-Трактовка:
-    нет 1        -> BdsEntry не исполняется (DXE не дошёл до BDS)
-    1 есть, 2 нет -> падение в первых строках (CRC системной таблицы, alloc)
-    2 есть, 3 нет -> падение на переменных/политике переменных
-    3 есть, 4 нет -> падение внутри PlatformBootManagerBeforeConsole
-    4 есть, 5 нет -> падение на коннекте консолей/AfterConsole
-    5 есть        -> BDS дошёл до загрузки опций
+Плюс сам UggFbDxe рисует полосу на 1200-й строке ПОСЛЕ установки GOP
+(PcdDebugStageBands) — «драйвер дисплея полностью готов».
 
 Идемпотентно.
 """
@@ -28,16 +24,17 @@ paint_bds.py — метки внутри BdsDxe (Common/edk2), чтобы най
 import os
 import sys
 
-MARK = "MsmPaintBand"
+MARK = "MsmPaintProgress"
 
 HELPER = r'''
 //
-// Отладка без UART: белая полоса N (fw/patches/paint_bds.py)
+// Отладка без UART: «прогресс-бар» — закрасить строки [0, Rows)
+// (fw/patches/paint_bds.py; ugg: 24bpp, stride 2160, база 0x90000000-256)
 //
 STATIC
 VOID
-MsmPaintBand (
-  IN UINTN  Band
+MsmPaintProgress (
+  IN UINTN  Rows
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
@@ -45,7 +42,7 @@ MsmPaintBand (
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = Band * 100; Y < Band * 100 + 50; Y++) {
+  for (Y = 0; Y < Rows; Y++) {
     Row = Base + Y * 2160;
     for (X = 0; X < 2160; X++) {
       Row[X] = 0xFF;
@@ -55,14 +52,14 @@ MsmPaintBand (
 
 '''
 
-# (якорь, метка, ставить ДО якоря?)
+# (якорь, высота прогресса, ставить ДО якоря?)
 HOOKS = [
-    ("  HotkeyTriggered = NULL;", 1, True),
-    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 6, False),
-    ("  BdsFormalizeEfiGlobalVariable ();", 2, False),
-    ("  PlatformBootManagerBeforeConsole ();", 3, True),
-    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 4, False),
-    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 5, False),
+    ("  HotkeyTriggered = NULL;", 150, True),
+    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 300, False),
+    ("  BdsFormalizeEfiGlobalVariable ();", 450, False),
+    ("  PlatformBootManagerBeforeConsole ();", 600, True),
+    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 750, False),
+    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 900, False),
 ]
 
 
@@ -86,11 +83,11 @@ def main():
     src = src.replace(anchor, HELPER + anchor, 1)
 
     added = 0
-    for anchor, band, before in HOOKS:
+    for anchor, rows, before in HOOKS:
         if anchor not in src:
             print("  !! не найден якорь: %s" % anchor.strip()[:60])
             continue
-        call = "  MsmPaintBand (%d);" % band
+        call = "  MsmPaintProgress (%d);" % rows
         repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         added += 1
@@ -100,7 +97,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_bds: добавлено меток %d" % added)
+    print("paint_bds: точек прогресса %d" % added)
     return 0
 
 
