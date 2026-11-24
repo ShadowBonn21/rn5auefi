@@ -65,6 +65,9 @@ jobs:
           grep -rl '0x9FFFF000' $EM/Silicon/Qualcomm/msm8937/Library/PlatformPeiLib/ | \
             xargs -r sed -i 's/0x9FFFF000/0x8E0D0000/g' || true
 
+      - name: Минимальный пролог PrePi (фикс для ugg)
+        run: python fw/patches/minimal_prepi_entry.py em
+
       - name: Покраска стадий PrePi (отладка без UART)
         run: python fw/patches/paint_stages.py em
 
