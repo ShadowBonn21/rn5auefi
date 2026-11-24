@@ -29,6 +29,15 @@
 #define FB_ORDER_RGB  0
 #define FB_ORDER_BGR  1
 
+/*
+  Панель ugg: MDSS сканирует на 256 байт РАНЬШЕ 0x90000000 — измерено по фото
+  (рамка-тест ложится по краям панели с точностью ~±5 px). Поэтому рисуем с
+  0x90000000 - 256 = 0x8FFFFF00, чтобы координата GOP x=0 попала ровно в левый
+  край панели. PcdFbXShiftBytes обязан быть кратен 4: иначе 32-битные записи в
+  Device-память дают alignment fault (проверено — payload падал).
+*/
+#define FB_BASE  ((UINTN)(FixedPcdGet32 (PcdMipiFrameBufferAddress) - FixedPcdGet32 (PcdFbXShiftBytes)))
+
 typedef struct {
   EFI_GRAPHICS_OUTPUT_PROTOCOL          Gop;
   EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE     Mode;
@@ -56,9 +65,7 @@ FbPixelPtr (
   IN UINTN  Y
   )
 {
-  UINTN  Base = (UINTN)FixedPcdGet32 (PcdMipiFrameBufferAddress);
-
-  return (UINT8 *)(Base + Y * FbStride () + X * 3);
+  return (UINT8 *)(FB_BASE + Y * FbStride () + X * 3);
 }
 
 STATIC VOID
@@ -273,13 +280,14 @@ UggFbDxeInitialize (
   EFI_HANDLE                            Handle = NULL;
   UINTN                                 Width  = FixedPcdGet32 (PcdMipiFrameBufferWidth);
   UINTN                                 Height = FixedPcdGet32 (PcdMipiFrameBufferHeight);
-  UINTN                                 Base   = FixedPcdGet32 (PcdMipiFrameBufferAddress);
+  UINTN                                 Base   = FB_BASE;
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL         Black  = { 0, 0, 0, 0 };
 
   DEBUG ((EFI_D_INFO,
-    "UggFbDxe: base=0x%08x %dx%d stride=%d order=%d\n",
-    (UINT32)Base, (UINT32)Width, (UINT32)Height, (UINT32)FbStride (),
-    (UINT32)FixedPcdGet32 (PcdFbRgbOrder)));
+    "UggFbDxe: base=0x%08x (pcd 0x%08x shift %d B) %dx%d stride=%d order=%d\n",
+    (UINT32)Base, (UINT32)FixedPcdGet32 (PcdMipiFrameBufferAddress),
+    (UINT32)FixedPcdGet32 (PcdFbXShiftBytes), (UINT32)Width, (UINT32)Height,
+    (UINT32)FbStride (), (UINT32)FixedPcdGet32 (PcdFbRgbOrder)));
 
   if ((Base == 0) || (Width == 0) || (Height == 0)) {
     DEBUG ((EFI_D_ERROR, "UggFbDxe: invalid PCDs\n"));

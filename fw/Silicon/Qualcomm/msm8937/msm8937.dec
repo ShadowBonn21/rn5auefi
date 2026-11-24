@@ -22,3 +22,7 @@
   # Порядок байтов пикселя: 0 = R,G,B ; 1 = B,G,R.
   # TODO: подтвердить цветным тестом (для чёрно-белой консоли не важно).
   gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder|0|UINT32|0x00000002
+  # Сдвиг начала сканирования MDSS относительно PcdMipiFrameBufferAddress, в байтах.
+  # Измерено на устройстве: 256 (= 85.33 px). Обязательно кратен 4: иначе
+  # 32-битные записи в Device-память дают alignment fault.
+  gMsm8937PkgTokenSpaceGuid.PcdFbXShiftBytes|256|UINT32|0x00000003

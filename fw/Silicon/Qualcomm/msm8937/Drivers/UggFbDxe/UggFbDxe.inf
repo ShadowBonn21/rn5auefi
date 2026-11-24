@@ -38,6 +38,7 @@
   gQcomTokenSpaceGuid.PcdMipiFrameBufferHeight
   gMsm8937PkgTokenSpaceGuid.PcdFbStride
   gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder
+  gMsm8937PkgTokenSpaceGuid.PcdFbXShiftBytes
 
 [Depex]
   TRUE
