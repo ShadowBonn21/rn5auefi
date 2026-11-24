@@ -61,11 +61,9 @@ jobs:
           cp fw/configs/msm8937.conf      $EM/configs/
           cp fw/configs/devices/ugg.conf  $EM/configs/devices/
           # 3. правки, которые скрипт не делает (см. fw/apply-overlay.ps1)
+          # (SimpleFbDxe не патчим: вместо него собственный UggFbDxe)
           grep -rl '0x9FFFF000' $EM/Silicon/Qualcomm/msm8937/Library/PlatformPeiLib/ | \
             xargs -r sed -i 's/0x9FFFF000/0x8E0D0000/g' || true
-
-      - name: Патч SimpleFbDxe (stride 2944)
-        run: python fw/patches/apply_simplefb_stride.py em
 
       - name: Сборка UEFI
         run: |
