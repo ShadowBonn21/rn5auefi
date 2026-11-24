@@ -39,6 +39,7 @@
   gMsm8937PkgTokenSpaceGuid.PcdFbStride
   gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder
   gMsm8937PkgTokenSpaceGuid.PcdFbXShiftBytes
+  gMsm8937PkgTokenSpaceGuid.PcdDebugStageBands
 
 [Depex]
   TRUE

@@ -319,6 +319,17 @@ UggFbDxeInitialize (
   /* Экран чистый: иначе на нём останется сплэш LK под текстом консоли. */
   FbFillRect (0, 0, Width, Height, &Black);
 
+  /*
+    Отладочная метка: белая полоса на 1150-й строке.
+    Видна => драйвер дошёл до конца инициализации (GOP установлен).
+    Убрать вместе с fw/patches/paint_stages.py, когда UEFI заработает.
+  */
+  if (FixedPcdGet32 (PcdDebugStageBands) != 0) {
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
+
+    FbFillRect (0, 1150, Width, 40, &White);
+  }
+
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &Handle,
                   &gEfiGraphicsOutputProtocolGuid,
