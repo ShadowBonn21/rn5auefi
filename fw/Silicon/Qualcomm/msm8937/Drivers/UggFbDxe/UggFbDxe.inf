@@ -1,0 +1,43 @@
+## @file
+#  UggFbDxe — framebuffer 24bpp (RGB888) для ugg.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = UggFbDxe
+  FILE_GUID                      = 4f0c2a71-8d15-4b0e-9c37-2d6b1e9a5f84
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UggFbDxeInitialize
+
+[Sources]
+  UggFbDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  Silicon/Qualcomm/QcomPkg/QcomPkg.dec
+  Silicon/Qualcomm/msm8937/msm8937.dec
+
+[LibraryClasses]
+  UefiDriverEntryPoint
+  UefiLib
+  DebugLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  PcdLib
+
+[Protocols]
+  gEfiGraphicsOutputProtocolGuid        ## PRODUCES
+  gEfiDevicePathProtocolGuid            ## PRODUCES
+
+[Pcd]
+  gQcomTokenSpaceGuid.PcdMipiFrameBufferAddress
+  gQcomTokenSpaceGuid.PcdMipiFrameBufferWidth
+  gQcomTokenSpaceGuid.PcdMipiFrameBufferHeight
+  gMsm8937PkgTokenSpaceGuid.PcdFbStride
+  gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder
+
+[Depex]
+  TRUE

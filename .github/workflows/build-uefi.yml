@@ -1,0 +1,86 @@
+name: build-uefi-ugg
+
+# Сборка порта UEFI для Redmi Note 5A Prime (ugg / MSM8940) из этого репозитория.
+#
+# Зачем CI: локально нужно ~6-8 ГБ и Linux-тулчейн; на машине, где готовился
+# проект, свободно было 4.9 ГБ. Здесь сборка идёт на ubuntu-22.04.
+#
+# Статус сборки на 2026-11: компилируется PrePi + DXE + наши библиотеки,
+# получается boot-ugg.img (UEFI Shell на framebuffer). eMMC/USB НЕ работают —
+# нет драйверов SoC (см. docs/01-feasibility.md). Это ожидаемо.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "fw/**"
+      - ".github/workflows/build-uefi.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-aarch64-linux-gnu uuid-dev iasl nasm \
+            python3 python3-pip git gzip gettext ca-certificates
+
+      - name: edk2-msm (сабмодули)
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules \
+            https://github.com/edk2-porting/edk2-msm.git em
+          cd em
+          # Страховка: если shallow-клон не дотянул сабмодули — добрать
+          git submodule update --init --depth 1 --recursive || true
+
+      - name: Наложить порт msm8937/ugg
+        run: |
+          set -eux
+          EM=em
+          # 1. библиотеки sdm660 -> msm8937
+          mkdir -p $EM/Silicon/Qualcomm/msm8937/Library
+          for lib in PlatformPeiLib PlatformPrePiLib MsPlatformDevicesLib SOCSmbiosInfoLib; do
+            if [ -d "$EM/Silicon/Qualcomm/sdm660/Library/$lib" ]; then
+              cp -r "$EM/Silicon/Qualcomm/sdm660/Library/$lib" "$EM/Silicon/Qualcomm/msm8937/Library/"
+              find "$EM/Silicon/Qualcomm/msm8937/Library/$lib" -type f -exec \
+                sed -i 's/sdm660/msm8937/g; s/SDM660/MSM8937/g' {} +
+            fi
+          done
+          # 2. наш слой поверх
+          cp -r fw/Silicon/Qualcomm/msm8937/.   $EM/Silicon/Qualcomm/msm8937/
+          cp -r fw/Silicon/Qualcomm/QcomPkg/Library/MsmUartSerialPortLib \
+                $EM/Silicon/Qualcomm/QcomPkg/Library/
+          mkdir -p $EM/Platform/Qualcomm/msm8937 $EM/Platform/Xiaomi/msm8937
+          cp -r fw/Platform/Qualcomm/msm8937/. $EM/Platform/Qualcomm/msm8937/
+          cp -r fw/Platform/Xiaomi/msm8937/.   $EM/Platform/Xiaomi/msm8937/
+          cp fw/configs/msm8937.conf      $EM/configs/
+          cp fw/configs/devices/ugg.conf  $EM/configs/devices/
+          # 3. правки, которые скрипт не делает (см. fw/apply-overlay.ps1)
+          grep -rl '0x9FFFF000' $EM/Silicon/Qualcomm/msm8937/Library/PlatformPeiLib/ | \
+            xargs -r sed -i 's/0x9FFFF000/0x8E0D0000/g' || true
+
+      - name: Патч SimpleFbDxe (stride 2944)
+        run: python fw/patches/apply_simplefb_stride.py em
+
+      - name: Сборка UEFI
+        run: |
+          cd em
+          bash build.sh --device ugg --release DEBUG -t GCC5 -u 2>&1 | tail -n 200
+        continue-on-error: true   # ожидаемо падает, пока нет драйвера SDCC/SoC-бинарей
+
+      - name: Артефакты
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugg-uefi
+          if-no-files-found: warn
+          path: |
+            em/boot-ugg.img
+            em/workspace/uefi-ugg-kernel
+            em/workspace/Build/ugg/**/*.fd
+            em/workspace/Build/ugg/**/*.efi

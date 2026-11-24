@@ -1,0 +1,8 @@
+﻿# рабочие артефакты
+build/
+dump/
+workspace/
+__pycache__/
+*.pyc
+# клоны апстрима рядом с портом
+edk2-msm/

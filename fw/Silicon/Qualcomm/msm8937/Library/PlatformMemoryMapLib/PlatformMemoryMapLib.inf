@@ -1,0 +1,24 @@
+## @file
+#  PlatformMemoryMapLib для MSM8937/MSM8940 (ugg).
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = PlatformMemoryMapLib
+  FILE_GUID                      = 7a1c9f3e-5b2d-4c88-9a11-3f6e0d2b4c71
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = PlatformMemoryMapLib
+
+[Sources]
+  PlatformMemoryMapLib.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  ArmPkg/ArmPkg.dec
+  Silicon/Qualcomm/QcomPkg/QcomPkg.dec
+
+[BuildOptions]
+  GCC:*_*_*_CC_FLAGS = -Wno-unused-const-variable

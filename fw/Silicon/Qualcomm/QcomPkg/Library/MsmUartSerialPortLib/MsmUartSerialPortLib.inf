@@ -1,0 +1,27 @@
+## @file
+#  SerialPortLib для BLSP UART (QUP v1.4) на MSM8937/MSM8940.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = MsmUartSerialPortLib
+  FILE_GUID                      = 9c6d1e42-6f38-4a57-8bd2-1e4c7f90ab35
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = SerialPortLib
+
+[Sources]
+  MsmUartSerialPortLib.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  ArmPkg/ArmPkg.dec
+  Silicon/Qualcomm/QcomPkg/QcomPkg.dec
+
+[Pcd]
+  gQcomTokenSpaceGuid.PcdUartBaseAddress
+
+[BuildOptions]
+  GCC:*_*_*_CC_FLAGS = -DMSM_UART_BASE=0x078B0000
