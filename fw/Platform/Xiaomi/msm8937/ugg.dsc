@@ -1,4 +1,4 @@
-﻿## @file
+## @file
 #  РЈСЃС‚СЂРѕР№СЃС‚РІРѕ: Xiaomi Redmi Note 5A Prime (ugg / MSM8940), 4/64, 720x1280.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent

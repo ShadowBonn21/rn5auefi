@@ -68,3 +68,6 @@
   # QcomCommonDsc.inc — см. fw/patches/enable_msm_uart.py (TODO, после G1).
 
 [Components.common]
+  # Свой framebuffer-драйвер (24bpp RGB888, stride 2160, сдвиг базы 256 B).
+  # Обязан быть и здесь, и в FDF, иначе build.py даёт F001.
+  Silicon/Qualcomm/msm8937/Drivers/UggFbDxe/UggFbDxe.inf

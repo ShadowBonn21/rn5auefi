@@ -68,8 +68,8 @@ jobs:
       - name: Сборка UEFI
         run: |
           cd em
+          set -o pipefail
           bash build.sh --device ugg --release RELEASE -t GCC5 2>&1 | tail -n 250
-        continue-on-error: true   # ожидаемо падает, пока нет драйвера SDCC/SoC-бинарей
 
       - name: Артефакты
         if: always()
