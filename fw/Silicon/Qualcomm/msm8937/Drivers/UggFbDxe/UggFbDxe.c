@@ -328,6 +328,40 @@ UggFbDxeInitialize (
   /* Экран чистый: иначе на нём останется сплэш LK под текстом консоли. */
   FbFillRect (0, 0, Width, Height, &Black);
 
+  /*
+    Отладка (PcdDebugStageBands):
+      1 — полоса 1200 (GOP установлен) / 1100 (ошибка установки)
+      2 — самопроверка геометрии: рамка, сетка 100 px, шахматка 10 px
+  */
+  if (FixedPcdGet32 (PcdDebugStageBands) == 2) {
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL White = { 0xFF, 0xFF, 0xFF, 0 };
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL Black = { 0x00, 0x00, 0x00, 0 };
+    UINTN                         I;
+
+    /* белая рамка 4 px по краям */
+    FbFillRect (0, 0, Width, 4, &White);
+    FbFillRect (0, Height - 4, Width, 4, &White);
+    FbFillRect (0, 0, 4, Height, &White);
+    FbFillRect (Width - 4, 0, 4, Height, &White);
+
+    /* сетка: вертикальные и горизонтальные линии 1 px каждые 100 px */
+    for (I = 100; I < Width; I += 100) {
+      FbFillRect (I, 0, 1, Height, &White);
+    }
+    for (I = 100; I < Height; I += 100) {
+      FbFillRect (0, I, Width, 1, &White);
+    }
+
+    /* шахматка: клетки 10x10, 12x12 клеток, в центре экрана */
+    for (I = 0; I < 12; I++) {
+      UINTN J;
+      for (J = 0; J < 12; J++) {
+        FbFillRect (200 + J * 10, 500 + I * 10, 10, 10,
+                    (((I + J) & 1) ? &White : &Black));
+      }
+    }
+  }
+
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &Handle,
                   &gEfiGraphicsOutputProtocolGuid,
