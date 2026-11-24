@@ -68,9 +68,6 @@ jobs:
       - name: Минимальный пролог PrePi (фикс для ugg)
         run: python fw/patches/minimal_prepi_entry.py em
 
-      - name: Покраска стадий PrePi (отладка без UART)
-        run: python fw/patches/paint_stages.py em
-
       - name: Метки внутри BDS
         run: python fw/patches/paint_bds.py em
 

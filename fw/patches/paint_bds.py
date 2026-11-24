@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — метки внутри BdsDxe (Common/edk2), чтобы понять, где стоит BDS.
+paint_bds.py — метки внутри BdsDxe (Common/edk2), чтобы найти точку падения BDS.
 
-Полосы (строки framebuffer'а, 24bpp stride 2160, база 0x90000000-256):
-    9  — BdsEntry начался            (строка ~900)
-    10 — перед PlatformBootManagerBeforeConsole  (~1000)
-    11 — после BeforeConsole         (~1100)
-    12 — после AfterConsole          (~1200)
+ВАЖНО: BdsDxe имеет Depex = TRUE и отрабатывает РАНЬШЕ нашего драйвера дисплея,
+поэтому любые метки, нарисованные до очистки экрана, стираются. Здесь метки
+ставятся внутри BdsEntry — они рисуются уже после UggFbDxe и остаются видны.
+
+Полосы (24bpp, stride 2160, база 0x90000000-256):
+    1 — первая строка BdsEntry            (строка ~100)
+    2 — после BdsFormalizeEfiGlobalVariable (~200)
+    3 — перед PlatformBootManagerBeforeConsole (~300)
+    4 — после BeforeConsole               (~400)
+    5 — после PlatformBootManagerAfterConsole (~500)
 
 Трактовка:
-    9 есть, 10 нет      -> BDS упал в начале (переменные/CRC/Formalize)
-    10 есть, 11 нет     -> падение внутри PlatformBootManagerBeforeConsole
-    11 есть, 12 нет     -> падение между консолями (ConnectAllDefaultConsoles)
-    12 есть             -> BDS дошёл до загрузки опций (дальше логотип/меню)
+    нет 1        -> BdsEntry не исполняется (DXE не дошёл до BDS)
+    1 есть, 2 нет -> падение в первых строках (CRC системной таблицы, alloc)
+    2 есть, 3 нет -> падение на переменных/политике переменных
+    3 есть, 4 нет -> падение внутри PlatformBootManagerBeforeConsole
+    4 есть, 5 нет -> падение на коннекте консолей/AfterConsole
+    5 есть        -> BDS дошёл до загрузки опций
 
 Идемпотентно.
 """
@@ -48,13 +55,14 @@ MsmPaintBand (
 
 '''
 
+# (якорь, метка, ставить ДО якоря?)
 HOOKS = [
-    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', "  MsmPaintBand (9);"),
-    ("  PlatformBootManagerBeforeConsole ();", "  MsmPaintBand (10);"),
-    ("  PlatformBootManagerAfterConsole ();", "  MsmPaintBand (12);"),
+    ("  HotkeyTriggered = NULL;", 1, True),
+    ("  BdsFormalizeEfiGlobalVariable ();", 2, False),
+    ("  PlatformBootManagerBeforeConsole ();", 3, True),
+    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 4, False),
+    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 5, False),
 ]
-
-AFTER_BEFORE = ("  PERF_INMODULE_END (\"PlatformBootManagerBeforeConsole\");", "  MsmPaintBand (11);")
 
 
 def main():
@@ -77,12 +85,14 @@ def main():
     src = src.replace(anchor, HELPER + anchor, 1)
 
     added = 0
-    for anchor, call in HOOKS + [AFTER_BEFORE]:
-        if anchor in src:
-            src = src.replace(anchor, call + "\n" + anchor, 1)
-            added += 1
-        else:
+    for anchor, band, before in HOOKS:
+        if anchor not in src:
             print("  !! не найден якорь: %s" % anchor.strip()[:60])
+            continue
+        call = "  MsmPaintBand (%d);" % band
+        repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
+        src = src.replace(anchor, repl, 1)
+        added += 1
 
     if added == 0:
         sys.exit("paint_bds: ни одной точки не найдено")
