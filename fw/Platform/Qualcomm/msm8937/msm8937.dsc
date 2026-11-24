@@ -62,9 +62,9 @@
   MsPlatformDevicesLib|Silicon/Qualcomm/msm8937/Library/MsPlatformDevicesLib/MsPlatformDevicesLib.inf
   SOCSmbiosInfoLib|Silicon/Qualcomm/msm8937/Library/SOCSmbiosInfoLib/SOCSmbiosInfoLib.inf
 
-  # QcomGeniSerialPortLib из QcomPkg — GENI, на msm8937 не работает.
-!if $(USE_UART) == 1
-  SerialPortLib|Silicon/Qualcomm/QcomPkg/Library/MsmUartSerialPortLib/MsmUartSerialPortLib.inf
-!endif
+  # SerialPortLib НЕ переопределяем здесь: класс уже задан в QcomCommonDsc.inc,
+  # повторное объявление ломает сборку (duplicate library class). Наш драйвер
+  # UART (MsmUartSerialPortLib, QUP v1.4) лежит рядом и включается патчем
+  # QcomCommonDsc.inc — см. fw/patches/enable_msm_uart.py (TODO, после G1).
 
 [Components.common]
