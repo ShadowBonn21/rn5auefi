@@ -80,5 +80,4 @@ jobs:
           path: |
             em/boot-ugg.img
             em/workspace/uefi-ugg-kernel
-            em/workspace/Build/ugg/**/*.fd
-            em/workspace/Build/ugg/**/*.efi
+            em/workspace/Build/ugg/RELEASE_GCC5/FV/MSM8937_UEFI.fd
