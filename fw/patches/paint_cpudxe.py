@@ -121,6 +121,18 @@ def main():
         sys.exit("paint_cpudxe: не найдено определение CpuDxeInitialize")
     src = src[:idx] + HELPER + src[idx:]
 
+    #
+    # ugg: SyncCacheConfig() обходит страничные таблицы и на нашей карте
+    # памяти уходит в бесконечный цикл (проверено метками: шаг 5 -> тишина).
+    # На время bring-up не синхронизируем GCD с MMU: защиты памяти всё равно
+    # отключены PCD'ами, так что атрибуты GCD не влияют на работу драйверов.
+    #
+    src = src.replace(
+        "  SyncCacheConfig (&mCpu);",
+        "  /* ugg: SyncCacheConfig отключён, см. fw/patches/paint_cpudxe.py */",
+        1,
+    )
+
     n = 0
     for anchor, step, before in HOOKS:
         if anchor not in src:
