@@ -71,6 +71,9 @@ jobs:
       - name: Отключить вывод DebugLib в framebuffer (24bpp!)
         run: python fw/patches/quiet_debug.py em
 
+      - name: Заглушить SerialPortLib (пишет в FB как 32bpp)
+        run: python fw/patches/null_serial.py em
+
       - name: Метки внутри BDS
         run: python fw/patches/paint_bds.py em
 
