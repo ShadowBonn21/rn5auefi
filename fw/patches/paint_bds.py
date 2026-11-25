@@ -57,6 +57,14 @@ HOOKS = [
     ("  HotkeyTriggered = NULL;", 150, True),
     ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 300, False),
     ("  BdsFormalizeEfiGlobalVariable ();", 450, False),
+
+    # Дискретные полоски (строки 1020+) — по одной на шаг работы с переменными.
+    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 0, "band"),
+    ("  InitializeHwErrRecSupport ();", 1, "band"),
+    ("      &BootTimeOut", 2, "band"),
+    ("                  &BootOptionSupport", 3, "band"),
+
+    ("  PlatformBootManagerBeforeConsole ();", 4, "band"),
     ("  PlatformBootManagerBeforeConsole ();", 600, True),
     ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 750, False),
     ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 900, False),
@@ -87,8 +95,12 @@ def main():
         if anchor not in src:
             print("  !! не найден якорь: %s" % anchor.strip()[:60])
             continue
-        call = "  MsmPaintProgress (%d);" % rows
-        repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
+        if before == "band":
+            call = "  MsmPaintBdsBand (%d);" % rows
+            repl = call + "\n" + anchor
+        else:
+            call = "  MsmPaintProgress (%d);" % rows
+            repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         added += 1
 
