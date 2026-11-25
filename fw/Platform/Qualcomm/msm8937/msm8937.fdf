@@ -96,7 +96,7 @@ READ_LOCK_STATUS   = TRUE
 
   # UEFI Shell + SimpleInit (GUI-загрузчик, как на остальных устройствах Renegade)
   INF ShellPkg/Application/Shell/Shell.inf
-  INF src/main/SimpleInitMain.inf
+#  INF src/main/SimpleInitMain.inf   # ВРЕМЕННО: чистая самопроверка
 
   INF MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf
 
