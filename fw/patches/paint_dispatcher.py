@@ -76,6 +76,51 @@ MsmPaintDigit (
 
 STATIC
 VOID
+MsmPaintGuid (
+  IN EFI_GUID  *Guid
+  )
+{
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINT8  *G    = (UINT8 *)Guid;
+  UINTN  Cell  = 40;
+  UINTN  OX    = 40;
+  UINTN  OY    = 200;
+  UINTN  Row;
+  UINTN  Col;
+  UINTN  I;
+  UINTN  B;
+  UINT8  *Ptr;
+  UINT8  Bit;
+
+  /* рамка 4 px вокруг блока 8x16 клеток */
+  for (Row = 0; Row < Cell * 16 + 8; Row++) {
+    Ptr = Base + (OY - 4 + Row) * 2160 + (OX - 4) * 3;
+    for (Col = 0; Col < Cell * 8 + 8; Col++) {
+      UINT8 V = ((Row < 4) || (Row >= Cell * 16 + 4) ||
+                 (Col < 4) || (Col >= Cell * 8 + 4)) ? 0xFF : 0x00;
+      Ptr[Col * 3 + 0] = V;
+      Ptr[Col * 3 + 1] = V;
+      Ptr[Col * 3 + 2] = V;
+    }
+  }
+
+  /* 16 байт GUID: строка = байт, 8 клеток = биты (старший слева) */
+  for (I = 0; I < 16; I++) {
+    for (B = 0; B < 8; B++) {
+      Bit = (UINT8)((G[I] >> (7 - B)) & 1);
+      for (Row = 0; Row < Cell - 2; Row++) {
+        Ptr = Base + (OY + I * Cell + Row) * 2160 + (OX + B * Cell) * 3;
+        for (Col = 0; Col < Cell - 2; Col++) {
+          Ptr[Col * 3 + 0] = Bit ? 0xFF : 0x00;
+          Ptr[Col * 3 + 1] = Bit ? 0xFF : 0x00;
+          Ptr[Col * 3 + 2] = Bit ? 0xFF : 0x00;
+        }
+      }
+    }
+  }
+}
+STATIC
+VOID
 MsmPaintDriverNumber (
   VOID
   )
@@ -104,7 +149,7 @@ MsmPaintDriverNumber (
 '''
 
 ANCHOR = "        Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);"
-CALL = "        MsmPaintDriverNumber ();\n"
+CALL = "        MsmPaintDriverNumber ();\n        MsmPaintGuid (&DriverEntry->FileName);\n"
 
 
 def main():
