@@ -31,6 +31,17 @@
   gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder|0
   gMsm8937PkgTokenSpaceGuid.PcdDebugStageBands|0
 
+  #
+  # Защита памяти ядром DXE. На ugg при установке gEfiCpuArchProtocolGuid
+  # ядро начинает применять NX/RO-политику к образам и куче, что вызывает
+  # SetMemoryAttributes -> дробление блочных записей страничных таблиц и
+  # зависание (проверено метками внутри CpuDxeInitialize: протокол ставится,
+  # но управление не возвращается).
+  #
+  gEfiMdeModulePkgTokenSpaceGuid.PcdDxeNxMemoryProtectionPolicy|0x0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdImageProtectionPolicy|0x0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdHeapGuardPropertyMask|0x0
+
   # Simple Init
   gSimpleInitTokenSpaceGuid.PcdGuiDefaultDPI|320
 

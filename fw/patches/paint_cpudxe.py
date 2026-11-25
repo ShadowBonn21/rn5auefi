@@ -1,21 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_cpudxe.py — метки внутри CpuDxeInitialize (ArmPkg/Drivers/CpuDxe/CpuDxe.c).
+paint_cpudxe.py — метки внутри CpuDxeInitialize.
 
-Рисует полосу начиная со строки 900: шаг k -> высота k*20 строк.
-Шаги:
-    1 — до InitializeExceptions()
-    2 — после InitializeExceptions()
-    3 — после InitializeDma()
-    4 — после InstallMultipleProtocolInterfaces() (CPU arch + MemoryAttribute)
-    5 — после SyncCacheConfig()   <-- главный подозреваемый
-    6 — после CreateEventEx()
-    7 — перед return EFI_SUCCESS
+ВАЖНО: сборка использует ЗАКРЕПЛЁННУЮ версию edk2 из сабмодуля edk2-msm,
+а не master. В ней функция выглядит так (ArmPkg/Drivers/CpuDxe/CpuDxe.c):
 
-Трактовка: если полоса остановилась на 4 -> виснет SyncCacheConfig
-(перестройка атрибутов по нашей карте памяти); на 3 -> InstallMultiple;
-на 2 -> InitializeDma; на 1 -> исключения.
+    InitializeExceptions (&mCpu);
+    InitializeDma (&mCpu);
+    Status = gBS->InstallMultipleProtocolInterfaces (   <-- CPU arch protocol
+                 &mCpuHandle, &gEfiCpuArchProtocolGuid, &mCpu, NULL);
+    mIsFlushingGCD = TRUE;
+    SyncCacheConfig (&mCpu);                            <-- перестройка атрибутов
+    mIsFlushingGCD = FALSE;
+    Status = gBS->CreateEventEx (...);
+    return Status;
+
+Метки: полоса-шаг (по 8 строк, шаг 12 строк, начиная со строки 900 экрана).
+
+    1 — перед InitializeExceptions
+    2 — после InitializeExceptions
+    3 — после InitializeDma
+    4 — перед InstallMultipleProtocolInterfaces
+    5 — после установки (перед mIsFlushingGCD = TRUE)
+    6 — после SyncCacheConfig
+    7 — перед CreateEventEx
+    8 — перед return
+
+Плюс диагностика без экрана: перед return вызывается холодная перезагрузка.
+Если телефон перезагрузился — значит весь CpuDxe отработал (и «зависание»
+на экране было замороженным кадром); если нет — код стоит на месте.
 """
 
 import os
@@ -39,7 +53,7 @@ MsmPaintCpuDxeStep (
   UINTN  X;
   UINT8  *Row;
 
-  /* полоски по 30 строк с зазором 10: шаг k -> строки 900+(k-1)*40 .. +30 */
+  /* полоски по 8 строк, шаг 12 строк: шаг k -> 900+(k-1)*12 .. +8 */
   for (K = 1; K <= Step && K <= 8; K++) {
     for (Y = 900 + (K - 1) * 12; Y < 900 + (K - 1) * 12 + 8; Y++) {
       Row = Base + Y * 2160;
@@ -49,14 +63,7 @@ MsmPaintCpuDxeStep (
     }
   }
 
-  /*
-    «Разрушающие» метки: каждый следующий шаг стирает одну видимую деталь.
-    По фото сразу видно, выполнялся ли шаг, даже если полоски не различимы.
-
-      шаг >= 4  -> стирается область штрихкода (x 36..368, y 196..844)
-      шаг >= 5  -> стирается область числа      (x 0..260,  y 0..100)
-      шаг >= 6  -> закрашивается белым блок внизу справа (x 400..700, y 1150..1250)
-  */
+  /* «разрушающие» метки: шаг >= 4 стирает штрихкод, шаг >= 5 — число */
   if (Step >= 4) {
     for (Y = 196; Y < 844; Y++) {
       Row = Base + Y * 2160;
@@ -77,20 +84,20 @@ MsmPaintCpuDxeStep (
       }
     }
   }
-
 }
 
 '''
 
+# (якорь, номер шага, ставить ДО якоря?)
 HOOKS = [
-    ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (1);", True),
-    ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (2);", False),
-    ("  InitializeDma (&mCpu);", "  MsmPaintCpuDxeStep (3);", False),
-    ("  if (FALSE) {", "  MsmPaintCpuDxeStep (4);", True),
-    ("  CpuHandle = NULL;", "  MsmPaintCpuDxeStep (5);", True),
-    ("  mIsFlushingGCD = TRUE;", "  MsmPaintCpuDxeStep (6);", True),
-    ("  mIsFlushingGCD = FALSE;", "  MsmPaintCpuDxeStep (7);", False),
-    ("  EfiCreateProtocolNotifyEvent (", "  MsmPaintCpuDxeStep (8);", True),
+    ("  InitializeExceptions (&mCpu);", 1, True),
+    ("  InitializeExceptions (&mCpu);", 2, False),
+    ("  InitializeDma (&mCpu);", 3, False),
+    ("  Status = gBS->InstallMultipleProtocolInterfaces (", 4, True),
+    ("  mIsFlushingGCD = TRUE;", 5, True),
+    ("  SyncCacheConfig (&mCpu);", 6, False),
+    ("  Status = gBS->CreateEventEx (", 7, True),
+    ("  return Status;", 8, True),
 ]
 
 
@@ -109,43 +116,17 @@ def main():
         return 0
 
     anchor = "CpuDxeInitialize (\n"
-    idx = src.find("EFI_STATUS\nEFIAPI\n" + anchor)
-    if idx < 0:
-        idx = src.find("EFI_STATUS\nCpuDxeInitialize (\n")
+    idx = src.find("EFI_STATUS\n" + anchor)
     if idx < 0:
         sys.exit("paint_cpudxe: не найдено определение CpuDxeInitialize")
     src = src[:idx] + HELPER + src[idx:]
 
-    #
-    # ugg: блок RemapUnusedMemoryNx() фатален на нашей карте памяти
-    # (проверено метками: шаг 3 -> тишина). Отключаем его прямо здесь,
-    # чтобы не править DSC (PCD не объявлен в DEC, доступных сборке).
-    #
-    src = src.replace(
-        "if (FeaturePcdGet (PcdRemapUnusedMemoryNx)) {",
-        "if (FALSE) {  /* ugg: see fw/patches/paint_cpudxe.py */",
-    )
-
-    #
-    # Диагностика «замороженного экрана»: если CpuDxe доходит до конца,
-    # принудительно перезагружаемся. Перезагрузку видно и без экрана,
-    # поэтому это независимый от дисплея канал.
-    #
-    anchor_end = "    &mHardwareInterruptProtocolNotifyEventRegistration\n    );"
-    if anchor_end in src:
-        src = src.replace(
-            anchor_end,
-            anchor_end + "\n\n"
-            "  /* ugg: диагностика (fw/patches/paint_cpudxe.py): дошли до конца */\n"
-            "  gST->RuntimeServices->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);",
-            1,
-        )
-
     n = 0
-    for anchor, call, before in HOOKS:
+    for anchor, step, before in HOOKS:
         if anchor not in src:
-            print("  !! не найден якорь: %s" % anchor.strip()[:50])
+            print("  !! не найден якорь для шага %d: %s" % (step, anchor.strip()[:50]))
             continue
+        call = "  MsmPaintCpuDxeStep (%d);" % step
         repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         n += 1
