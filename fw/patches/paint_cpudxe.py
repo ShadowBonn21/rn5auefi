@@ -126,6 +126,18 @@ def main():
         "if (FALSE) {  /* ugg: see fw/patches/paint_cpudxe.py */",
     )
 
+    #
+    # Диагностика «замороженного экрана»: если CpuDxe доходит до конца,
+    # принудительно перезагружаемся. Перезагрузку видно и без экрана,
+    # поэтому это независимый от дисплея канал.
+    #
+    idx_ret = src.rfind("  return EFI_SUCCESS;")
+    if idx_ret > 0:
+        src = (src[:idx_ret]
+               + "  /* ugg: диагностика (fw/patches/paint_cpudxe.py) */\n"
+               + "  gRT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);\n\n"
+               + src[idx_ret:])
+
     n = 0
     for anchor, call, before in HOOKS:
         if anchor not in src:
