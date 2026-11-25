@@ -21,15 +21,6 @@
 [BuildOptions.common]
   GCC:*_*_AARCH64_CC_FLAGS = -DENABLE_SIMPLE_INIT
 
-#
-# CpuDxe: не переназначать «неиспользуемую» память на NX.
-# На ugg этот шаг валится (проверено метками внутри CpuDxeInitialize:
-# выполнение доходит до шага 3 и дальше не идёт), а карта памяти у нас
-# своя и подробная. Апстримный RemapUnusedMemoryNx проходит по всей карте
-# и вызывает SetMemoryAttributes — на нашей конфигурации это фатально.
-#
-[PcdsFeatureFlag]
-  gArmTokenSpaceGuid.PcdRemapUnusedMemoryNx|FALSE
 
 [PcdsFixedAtBuild.common]
   # Панель ugg: 720x1280, MDSS 32bpp, stride 2944 (fb0/stride), 2 буфера

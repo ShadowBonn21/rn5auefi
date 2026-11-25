@@ -86,7 +86,7 @@ HOOKS = [
     ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (1);", True),
     ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (2);", False),
     ("  InitializeDma (&mCpu);", "  MsmPaintCpuDxeStep (3);", False),
-    ("  if (FeaturePcdGet (PcdRemapUnusedMemoryNx)) {", "  MsmPaintCpuDxeStep (4);", True),
+    ("  if (FALSE) {", "  MsmPaintCpuDxeStep (4);", True),
     ("  CpuHandle = NULL;", "  MsmPaintCpuDxeStep (5);", True),
     ("  mIsFlushingGCD = TRUE;", "  MsmPaintCpuDxeStep (6);", True),
     ("  mIsFlushingGCD = FALSE;", "  MsmPaintCpuDxeStep (7);", False),
@@ -115,6 +115,16 @@ def main():
     if idx < 0:
         sys.exit("paint_cpudxe: не найдено определение CpuDxeInitialize")
     src = src[:idx] + HELPER + src[idx:]
+
+    #
+    # ugg: блок RemapUnusedMemoryNx() фатален на нашей карте памяти
+    # (проверено метками: шаг 3 -> тишина). Отключаем его прямо здесь,
+    # чтобы не править DSC (PCD не объявлен в DEC, доступных сборке).
+    #
+    src = src.replace(
+        "if (FeaturePcdGet (PcdRemapUnusedMemoryNx)) {",
+        "if (FALSE) {  /* ugg: see fw/patches/paint_cpudxe.py */",
+    )
 
     n = 0
     for anchor, call, before in HOOKS:
