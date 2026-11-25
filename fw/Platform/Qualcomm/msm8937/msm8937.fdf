@@ -54,7 +54,7 @@ READ_LOCK_STATUS   = TRUE
 # INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
 INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
 INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
-# INF MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf   # ВРЕМЕННО: проверка, не он ли висит на нашем GOP
+  INF MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
 # INF MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
 
   INF ArmPkg/Drivers/ArmGic/ArmGicDxe.inf

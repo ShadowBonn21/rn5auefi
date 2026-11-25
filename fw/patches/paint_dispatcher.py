@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_dispatcher.py — «счётчик драйверов» в диспетчере DXE.
+paint_dispatcher.py — «цифровой счётчик» драйверов в диспетчере DXE.
 
-Перед запуском каждого драйвера рисуем белую область сверху высотой
-count*6 строк (24bpp, stride 2160, база 0x90000000-256).
+Перед запуском каждого драйвера рисует его порядковый номер семисегментными
+цифрами в левом верхнем углу (24bpp, stride 2160, база 0x90000000-256).
 
-Поскольку UggFbDxe при инициализации очищает экран, всё нарисованное до него
-стирается, а метки, поставленные после, остаются. Поэтому итоговая высота
-делится на 6 и даёт номер драйвера, на котором диспетчеризация встала.
-
-Пример: белое поле 174 строки -> 174/6 = 29 -> завис 29-й драйвер.
+Почему так: высота полосы зависела от порядка разрешения Depex и «плыла»,
+а число читается однозначно. После того как UggFbDxe очищает экран, счётчик
+перерисовывается для каждого следующего драйвера, поэтому на экране остаётся
+номер того драйвера, на котором диспетчеризация остановилась.
 
 Идемпотентно.
 """
@@ -18,44 +17,94 @@ count*6 строк (24bpp, stride 2160, база 0x90000000-256).
 import os
 import sys
 
-MARK = "MsmPaintDriverCount"
+MARK = "MsmPaintDriverNumber"
 
 HELPER = r'''
 //
-// Отладка без UART: номер запускаемого драйвера (fw/patches/paint_dispatcher.py)
+// Отладка без UART: номер запускаемого драйвера семисегментными цифрами
+// (fw/patches/paint_dispatcher.py; ugg: 24bpp, stride 2160, база -256)
 //
 STATIC UINTN  mUggDispatchCount = 0;
 
 STATIC
 VOID
-MsmPaintDriverCount (
+MsmPaintDigit (
+  IN UINTN  X,
+  IN UINTN  Y,
+  IN UINTN  Digit
+  )
+{
+  /* биты сегментов: a=1, b=2, c=4, d=8, e=16, f=32, g=64 */
+  STATIC CONST UINT8  Seg[10] = {
+    0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
+  };
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  W = 36;
+  UINTN  H = 72;
+  UINTN  T = 7;
+  UINTN  S = Seg[Digit % 10];
+  UINTN  Row;
+  UINTN  Col;
+  UINT8  *Ptr;
+
+  /* сегмент: смещение по X, Y, ширина, высота */
+  CONST UINTN  Rect[7][4] = {
+    { 0, 0, W, T },                 /* a */
+    { W - T, 0, T, H / 2 },         /* b */
+    { W - T, H / 2, T, H / 2 },     /* c */
+    { 0, H - T, W, T },             /* d */
+    { 0, H / 2, T, H / 2 },         /* e */
+    { 0, 0, T, H / 2 },             /* f */
+    { 0, H / 2 - T / 2, W, T }      /* g */
+  };
+  UINTN  I;
+
+  for (I = 0; I < 7; I++) {
+    if ((S & (1u << I)) == 0) {
+      continue;
+    }
+    for (Row = 0; Row < Rect[I][3]; Row++) {
+      Ptr = Base + (Y + Rect[I][1] + Row) * 2160 + (X + Rect[I][0]) * 3;
+      for (Col = 0; Col < Rect[I][2]; Col++) {
+        Ptr[Col * 3 + 0] = 0xFF;
+        Ptr[Col * 3 + 1] = 0xFF;
+        Ptr[Col * 3 + 2] = 0xFF;
+      }
+    }
+  }
+}
+
+STATIC
+VOID
+MsmPaintDriverNumber (
   VOID
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  Rows;
-  UINTN  Y;
-  UINTN  X;
-  UINT8  *Row;
+  UINTN  N = ++mUggDispatchCount;
+  UINTN  Row;
+  UINTN  Col;
+  UINT8  *Ptr;
 
-  mUggDispatchCount++;
-  Rows = mUggDispatchCount * 6;
-  if (Rows > 1200) {
-    Rows = 1200;
-  }
-
-  for (Y = 0; Y < Rows; Y++) {
-    Row = Base + Y * 2160;
-    for (X = 0; X < 2160; X++) {
-      Row[X] = 0xFF;
+  /* стереть область 0..X=260, 0..Y=100 (чёрным) */
+  for (Row = 0; Row < 100; Row++) {
+    Ptr = Base + Row * 2160;
+    for (Col = 0; Col < 260; Col++) {
+      Ptr[Col * 3 + 0] = 0x00;
+      Ptr[Col * 3 + 1] = 0x00;
+      Ptr[Col * 3 + 2] = 0x00;
     }
   }
+
+  /* десятки слева, единицы справа */
+  MsmPaintDigit (10, 10, (N / 10) % 10);
+  MsmPaintDigit (60, 10, N % 10);
 }
 
 '''
 
 ANCHOR = "        Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);"
-CALL = "        MsmPaintDriverCount ();\n"
+CALL = "        MsmPaintDriverNumber ();\n"
 
 
 def main():
@@ -75,7 +124,6 @@ def main():
     if ANCHOR not in src:
         sys.exit("paint_dispatcher: не найден вызов CoreStartImage в CoreDispatcher")
 
-    # helper — перед определением CoreDispatcher (не перед прототипом!)
     anchor_fn = "EFI_STATUS\nEFIAPI\nCoreDispatcher ("
     idx = src.find(anchor_fn)
     if idx < 0:
@@ -85,7 +133,7 @@ def main():
     src = src.replace(ANCHOR, CALL + ANCHOR, 1)
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_dispatcher: счётчик добавлен")
+    print("paint_dispatcher: цифровой счётчик добавлен")
     return 0
 
 
