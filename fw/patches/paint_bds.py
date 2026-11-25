@@ -50,6 +50,29 @@ MsmPaintProgress (
   }
 }
 
+//
+// Дискретная полоска Idx: строки 1020 + Idx*40 .. +30.
+// Нужна, чтобы отличать близкие по высоте шаги работы с переменными в BDS.
+//
+STATIC
+VOID
+MsmPaintBdsBand (
+  IN UINTN  Idx
+  )
+{
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  Y;
+  UINTN  X;
+  UINT8  *Row;
+
+  for (Y = 1020 + Idx * 40; Y < 1020 + Idx * 40 + 30; Y++) {
+    Row = Base + Y * 2160;
+    for (X = 0; X < 2160; X++) {
+      Row[X] = 0xFF;
+    }
+  }
+}
+
 '''
 
 # (якорь, высота прогресса, ставить ДО якоря?)
@@ -61,8 +84,8 @@ HOOKS = [
     # Дискретные полоски (строки 1020+) — по одной на шаг работы с переменными.
     ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 0, "band"),
     ("  InitializeHwErrRecSupport ();", 1, "band"),
-    ("      &BootTimeOut", 2, "band"),
-    ("                  &BootOptionSupport", 3, "band"),
+    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", 2, "band"),
+    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', 3, "band"),
 
     ("  PlatformBootManagerBeforeConsole ();", 4, "band"),
     ("  PlatformBootManagerBeforeConsole ();", 600, True),
