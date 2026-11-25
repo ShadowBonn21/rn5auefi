@@ -41,7 +41,7 @@ MsmPaintCpuDxeStep (
 
   /* полоски по 30 строк с зазором 10: шаг k -> строки 900+(k-1)*40 .. +30 */
   for (K = 1; K <= Step && K <= 8; K++) {
-    for (Y = 900 + (K - 1) * 40; Y < 900 + (K - 1) * 40 + 30; Y++) {
+    for (Y = 900 + (K - 1) * 12; Y < 900 + (K - 1) * 12 + 8; Y++) {
       Row = Base + Y * 2160;
       for (X = 0; X < 2160; X++) {
         Row[X] = 0xFF;
@@ -77,16 +77,7 @@ MsmPaintCpuDxeStep (
       }
     }
   }
-  if (Step >= 6) {
-    for (Y = 1150; Y < 1250; Y++) {
-      Row = Base + Y * 2160;
-      for (X = 400; X < 700; X++) {
-        Row[X * 3 + 0] = 0xFF;
-        Row[X * 3 + 1] = 0xFF;
-        Row[X * 3 + 2] = 0xFF;
-      }
-    }
-  }
+
 }
 
 '''
