@@ -34,7 +34,7 @@ MsmPaintCpuDxeStep (
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  Rows = Step * 20;
+  UINTN  Rows = Step * 40;
   UINTN  Y;
   UINTN  X;
   UINT8  *Row;
@@ -54,8 +54,10 @@ HOOKS = [
     ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (2);", False),
     ("  InitializeDma (&mCpu);", "  MsmPaintCpuDxeStep (3);", False),
     ("  if (FeaturePcdGet (PcdRemapUnusedMemoryNx)) {", "  MsmPaintCpuDxeStep (4);", True),
-    ("  mIsFlushingGCD = FALSE;", "  MsmPaintCpuDxeStep (5);", False),
-    ("  EfiCreateProtocolNotifyEvent (", "  MsmPaintCpuDxeStep (6);", True),
+    ("  CpuHandle = NULL;", "  MsmPaintCpuDxeStep (5);", True),
+    ("  mIsFlushingGCD = TRUE;", "  MsmPaintCpuDxeStep (6);", True),
+    ("  mIsFlushingGCD = FALSE;", "  MsmPaintCpuDxeStep (7);", False),
+    ("  EfiCreateProtocolNotifyEvent (", "  MsmPaintCpuDxeStep (8);", True),
 ]
 
 
