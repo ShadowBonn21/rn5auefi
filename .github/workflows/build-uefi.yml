@@ -74,6 +74,9 @@ jobs:
       - name: Заглушить SerialPortLib (пишет в FB как 32bpp)
         run: python fw/patches/null_serial.py em
 
+      - name: Убрать последовательную консоль из ConOut
+        run: python fw/patches/no_serial_console.py em
+
       - name: Метки внутри BDS
         run: python fw/patches/paint_bds.py em
 
