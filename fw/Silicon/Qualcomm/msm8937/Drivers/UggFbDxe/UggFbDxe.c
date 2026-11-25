@@ -278,6 +278,26 @@ UggFbSetMode (
   return (ModeNumber == 0) ? EFI_SUCCESS : EFI_UNSUPPORTED;
 }
 
+/* Отладка: периодическая перерисовка креста (PcdDebugStageBands == 2). */
+STATIC EFI_EVENT  mRedrawTimer = NULL;
+
+STATIC
+VOID
+EFIAPI
+UggFbRedrawCallback (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  UINTN                          Width  = FixedPcdGet32 (PcdMipiFrameBufferWidth);
+  UINTN                          Height = FixedPcdGet32 (PcdMipiFrameBufferHeight);
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White  = { 0xFF, 0xFF, 0xFF, 0 };
+
+  FbFillRect (0, 600, Width, 4, &White);
+  FbFillRect (360, 0, 4, Height, &White);
+  FbFillRect (20, 20, 40, 40, &White);
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -367,5 +387,19 @@ UggFbDxeInitialize (
   }
 
   ASSERT_EFI_ERROR (Status);
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 2) {
+    Status = gBS->CreateEvent (
+                    EVT_TIMER | EVT_NOTIFY_SIGNAL,
+                    TPL_CALLBACK,
+                    UggFbRedrawCallback,
+                    NULL,
+                    &mRedrawTimer
+                    );
+    if (!EFI_ERROR (Status)) {
+      gBS->SetTimer (mRedrawTimer, TIMER_PERIODIC, 500000);   /* 0.5 c */
+    }
+  }
+
   return Status;
 }
