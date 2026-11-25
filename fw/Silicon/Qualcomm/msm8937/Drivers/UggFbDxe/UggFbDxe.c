@@ -397,7 +397,7 @@ UggFbDxeInitialize (
                     &mRedrawTimer
                     );
     if (!EFI_ERROR (Status)) {
-      gBS->SetTimer (mRedrawTimer, TIMER_PERIODIC, 500000);   /* 0.5 c */
+      gBS->SetTimer (mRedrawTimer, TimerPeriodic, 500000);   /* 0.5 c */
     }
   }
 
