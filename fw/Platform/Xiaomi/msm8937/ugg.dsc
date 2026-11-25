@@ -28,7 +28,7 @@
   gQcomTokenSpaceGuid.PcdMipiFrameBufferAddress|0x90000000
   gMsm8937PkgTokenSpaceGuid.PcdFbStride|2160
   gMsm8937PkgTokenSpaceGuid.PcdFbRgbOrder|0
-  gMsm8937PkgTokenSpaceGuid.PcdDebugStageBands|2
+  gMsm8937PkgTokenSpaceGuid.PcdDebugStageBands|0
 
   # Simple Init
   gSimpleInitTokenSpaceGuid.PcdGuiDefaultDPI|320
