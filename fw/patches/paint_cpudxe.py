@@ -50,7 +50,7 @@ MsmPaintCpuDxeStep (
 '''
 
 HOOKS = [
-    ("  ArmDisableInterrupts ();", "  MsmPaintCpuDxeStep (1);", True),
+    ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (1);", True),
     ("  InitializeExceptions ();", "  MsmPaintCpuDxeStep (2);", False),
     ("  InitializeDma (&mCpu);", "  MsmPaintCpuDxeStep (3);", False),
     ("  if (FeaturePcdGet (PcdRemapUnusedMemoryNx)) {", "  MsmPaintCpuDxeStep (4);", True),
