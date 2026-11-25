@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — «прогресс-бар» внутри BdsDxe: высота белой области = стадия.
+paint_bds.py — дискретные метки внутри BdsDxe.
 
-Почему так: отдельные полосы близко по высоте и их легко спутать. Здесь каждая
-пройденная стадия «докрашивает» область сверху вниз до новой высоты, поэтому
-достаточно посмотреть, ДО КУДА белое — и всё понятно без счёта.
+Раньше метки рисовали белую область «от верха экрана», из-за чего сливались
+с метками других модулей и с очисткой экрана. Теперь каждая метка — отдельная
+полоска на своей строке, и по фото однозначно видно, какие шаги выполнены.
 
-Высоты (строки из 1280, 24bpp stride 2160, база 0x90000000-256):
-    150 — BdsEntry начался
-    300 — строка DEBUG("[Bds] Entry...") пройдена
-    450 — BdsFormalizeEfiGlobalVariable() пройдена
-    600 — перед PlatformBootManagerBeforeConsole()
-    750 — BeforeConsole вернулся
-    900 — AfterConsole вернулся
+Полоски (24bpp, stride 2160, база 0x90000000-256), шаг 100 строк:
 
-Плюс сам UggFbDxe рисует полосу на 1200-й строке ПОСЛЕ установки GOP
-(PcdDebugStageBands) — «драйвер дисплея полностью готов».
+    60  — BdsEntry начался
+    160 — строка DEBUG пройдена
+    260 — перед LocateProtocol(VariablePolicy)
+    360 — перед InitializeHwErrRecSupport()
+    460 — перед инициализацией BootOptionSupport
+    560 — перед кэшированием BootNext
+    660 — перед PlatformBootManagerBeforeConsole()
+    760 — после PlatformBootManagerBeforeConsole()
+    860 — после PlatformBootManagerAfterConsole()
 
 Идемпотентно.
 """
@@ -24,17 +25,16 @@ paint_bds.py — «прогресс-бар» внутри BdsDxe: высота �
 import os
 import sys
 
-MARK = "MsmPaintProgress"
+MARK = "MsmPaintBdsStep"
 
 HELPER = r'''
 //
-// Отладка без UART: «прогресс-бар» — закрасить строки [0, Rows)
-// (fw/patches/paint_bds.py; ugg: 24bpp, stride 2160, база 0x90000000-256)
+// Отладка без UART: шаг BDS (fw/patches/paint_bds.py)
 //
 STATIC
 VOID
-MsmPaintProgress (
-  IN UINTN  Rows
+MsmPaintBdsStep (
+  IN UINTN  Step
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
@@ -42,30 +42,8 @@ MsmPaintProgress (
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = 0; Y < Rows; Y++) {
-    Row = Base + Y * 2160;
-    for (X = 0; X < 2160; X++) {
-      Row[X] = 0xFF;
-    }
-  }
-}
-
-//
-// Дискретная полоска Idx: строки 1020 + Idx*40 .. +30.
-// Нужна, чтобы отличать близкие по высоте шаги работы с переменными в BDS.
-//
-STATIC
-VOID
-MsmPaintBdsBand (
-  IN UINTN  Idx
-  )
-{
-  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  Y;
-  UINTN  X;
-  UINT8  *Row;
-
-  for (Y = 1020 + Idx * 40; Y < 1020 + Idx * 40 + 30; Y++) {
+  /* полоска шага: строки 60 + Step*100 .. +30 */
+  for (Y = 60 + Step * 100; Y < 60 + Step * 100 + 30; Y++) {
     Row = Base + Y * 2160;
     for (X = 0; X < 2160; X++) {
       Row[X] = 0xFF;
@@ -75,22 +53,17 @@ MsmPaintBdsBand (
 
 '''
 
-# (якорь, высота прогресса, ставить ДО якоря?)
+# (якорь, номер шага, ставить ДО якоря?)
 HOOKS = [
-    ("  HotkeyTriggered = NULL;", 150, True),
-    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 300, False),
-    ("  BdsFormalizeEfiGlobalVariable ();", 450, False),
-
-    # Дискретные полоски (строки 1020+) — по одной на шаг работы с переменными.
-    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 0, "band"),
-    ("  InitializeHwErrRecSupport ();", 1, "band"),
-    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", 2, "band"),
-    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', 3, "band"),
-
-    ("  PlatformBootManagerBeforeConsole ();", 4, "band"),
-    ("  PlatformBootManagerBeforeConsole ();", 600, True),
-    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 750, False),
-    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 900, False),
+    ("  HotkeyTriggered = NULL;", 0, True),
+    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 1, False),
+    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 2, True),
+    ("  InitializeHwErrRecSupport ();", 3, True),
+    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", 4, True),
+    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', 5, True),
+    ("  PlatformBootManagerBeforeConsole ();", 6, True),
+    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 7, False),
+    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 8, False),
 ]
 
 
@@ -108,22 +81,18 @@ def main():
         print("paint_bds: уже пропатчено")
         return 0
 
-    anchor = "VOID\nEFIAPI\nBdsEntry ("
-    if anchor not in src:
+    anchor_fn = "VOID\nEFIAPI\nBdsEntry ("
+    if anchor_fn not in src:
         sys.exit("paint_bds: не найден BdsEntry")
-    src = src.replace(anchor, HELPER + anchor, 1)
+    src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
 
     added = 0
-    for anchor, rows, before in HOOKS:
+    for anchor, step, before in HOOKS:
         if anchor not in src:
-            print("  !! не найден якорь: %s" % anchor.strip()[:60])
+            print("  !! не найден якорь для шага %d: %s" % (step, anchor.strip()[:55]))
             continue
-        if before == "band":
-            call = "  MsmPaintBdsBand (%d);" % rows
-            repl = call + "\n" + anchor
-        else:
-            call = "  MsmPaintProgress (%d);" % rows
-            repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
+        call = "  MsmPaintBdsStep (%d);" % step
+        repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         added += 1
 
@@ -132,7 +101,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_bds: точек прогресса %d" % added)
+    print("paint_bds: точек %d" % added)
     return 0
 
 
