@@ -34,15 +34,18 @@ MsmPaintCpuDxeStep (
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  Rows = Step * 40;
+  UINTN  K;
   UINTN  Y;
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = 900; Y < 900 + Rows && Y < 1270; Y++) {
-    Row = Base + Y * 2160;
-    for (X = 0; X < 2160; X++) {
-      Row[X] = 0xFF;
+  /* полоски по 30 строк с зазором 10: шаг k -> строки 900+(k-1)*40 .. +30 */
+  for (K = 1; K <= Step && K <= 8; K++) {
+    for (Y = 900 + (K - 1) * 40; Y < 900 + (K - 1) * 40 + 30; Y++) {
+      Row = Base + Y * 2160;
+      for (X = 0; X < 2160; X++) {
+        Row[X] = 0xFF;
+      }
     }
   }
 }
