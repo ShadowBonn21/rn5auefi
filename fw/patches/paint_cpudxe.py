@@ -131,12 +131,15 @@ def main():
     # принудительно перезагружаемся. Перезагрузку видно и без экрана,
     # поэтому это независимый от дисплея канал.
     #
-    idx_ret = src.rfind("  return EFI_SUCCESS;")
-    if idx_ret > 0:
-        src = (src[:idx_ret]
-               + "  /* ugg: диагностика (fw/patches/paint_cpudxe.py) */\n"
-               + "  gRT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);\n\n"
-               + src[idx_ret:])
+    anchor_end = "    &mHardwareInterruptProtocolNotifyEventRegistration\n    );"
+    if anchor_end in src:
+        src = src.replace(
+            anchor_end,
+            anchor_end + "\n\n"
+            "  /* ugg: диагностика (fw/patches/paint_cpudxe.py): дошли до конца */\n"
+            "  gST->RuntimeServices->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);",
+            1,
+        )
 
     n = 0
     for anchor, call, before in HOOKS:
