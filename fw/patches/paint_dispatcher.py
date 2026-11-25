@@ -75,8 +75,8 @@ def main():
     if ANCHOR not in src:
         sys.exit("paint_dispatcher: не найден вызов CoreStartImage в CoreDispatcher")
 
-    # helper — перед определением CoreDispatcher
-    anchor_fn = "CoreDispatcher (\n"
+    # helper — перед определением CoreDispatcher (не перед прототипом!)
+    anchor_fn = "EFI_STATUS\nEFIAPI\nCoreDispatcher ("
     idx = src.find(anchor_fn)
     if idx < 0:
         sys.exit("paint_dispatcher: не найдено определение CoreDispatcher")
