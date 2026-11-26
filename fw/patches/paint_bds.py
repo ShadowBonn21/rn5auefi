@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — два независимых сигнала о состоянии BDS.
+paint_bds.py — три независимых сигнала о BDS, без подвисающих вызовов.
 
-1. ЦИФРЫ (работают даже при сломанной консоли), верхняя строка, y=10:
-       x=360 — 1, если BdsInitialize (точка входа драйвера) начал работу
-       x=410 — 1, если BdsDxe установил gEfiBdsArchProtocolGuid
-       x=260/310 — шаг BdsEntry (0..8)
+Что рисуется (24bpp, stride 2160, база 0x90000000-256):
 
-2. ТЕКСТ в консоль (виден только если ConOut реально подключён к нашему GOP):
-       при входе в BdsInitialize печатается "UGG-BDS-INIT"
-       при входе в BdsEntry      печатается "UGG-BDS-ENTRY"
+    цифра 1 в (660,10) — BdsInitialize (точка входа драйвера) начал работу
+    полоса на строке 200 — gST->ConOut существует, и OutputString ВЕРНУЛСЯ
+    полоса на строке 260 — gST->ConOut == NULL (консоли нет вовсе)
+    цифра 1 в (680,10) — BdsEntry начал работу
+    полоса на строке 320 — в BdsEntry OutputString вернулся
 
-Это разом отвечает на вопрос: BDS не запускается (нет цифры) или запускается,
-но консоль никуда не выводит (цифра есть, текста нет).
+Порядок важен: маркер ставится ДО вызова OutputString, поэтому если полосы
+200/260 нет — значит завис именно вывод в консоль (или код до него).
 
 Идемпотентно.
 """
@@ -25,7 +24,7 @@ MARK = "MsmPaintBdsState"
 
 HELPER = r'''
 //
-// Отладка без UART: цифры состояния BDS (fw/patches/paint_bds.py)
+// Отладка без UART: состояние BDS (fw/patches/paint_bds.py)
 //
 STATIC
 VOID
@@ -83,38 +82,46 @@ MsmPaintBdsDigit (
 
 STATIC
 VOID
-MsmPaintBdsStep (
-  IN UINTN  Step
+MsmPaintBdsBar (
+  IN UINTN  Row0
   )
 {
-  /* шаг не рисуем: экран занят маркерами */
-  (VOID)Step;
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  Y;
+  UINTN  X;
+  UINT8  *Row;
+
+  for (Y = Row0; Y < Row0 + 24; Y++) {
+    Row = Base + Y * 2160;
+    for (X = 0; X < 2160; X++) {
+      Row[X] = 0xFF;
+    }
+  }
 }
 
 '''
 
+INIT_CODE = (
+    "  MsmPaintBdsDigit (660, 1);\n"
+    "  if (gST->ConOut != NULL) {\n"
+    '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-INIT\\r\\n");\n'
+    "    MsmPaintBdsBar (200);\n"
+    "  } else {\n"
+    "    MsmPaintBdsBar (260);\n"
+    "  }\n"
+)
+
+ENTRY_CODE = (
+    "  MsmPaintBdsDigit (680, 1);\n"
+    "  if (gST->ConOut != NULL) {\n"
+    '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-ENTRY\\r\\n");\n'
+    "    MsmPaintBdsBar (320);\n"
+    "  }\n"
+)
+
 HOOKS = [
-    # цифровые маркеры (видны всегда)
-    ("  EFI_HANDLE  Handle;", "  MsmPaintBdsDigit (660, 1);\n", True),
-    ("  HotkeyTriggered = NULL;", "  MsmPaintBdsDigit (680, 1);\n", True),
-    ("  HotkeyTriggered = NULL;", "  MsmPaintBdsStep (0);\n", True),
-    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', "  MsmPaintBdsStep (1);\n", False),
-    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", "  MsmPaintBdsStep (2);\n", True),
-    ("  InitializeHwErrRecSupport ();", "  MsmPaintBdsStep (3);\n", True),
-    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", "  MsmPaintBdsStep (4);\n", True),
-    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', "  MsmPaintBdsStep (5);\n", True),
-    ("  PlatformBootManagerBeforeConsole ();", "  MsmPaintBdsStep (6);\n", True),
-    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', "  MsmPaintBdsStep (7);\n", False),
-    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', "  MsmPaintBdsStep (8);\n", False),
-    # текстовые метки (видны только при рабочем ConOut)
-    ("  EFI_HANDLE  Handle;",
-     '  if (gST->ConOut != NULL) {\n'
-     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-INIT\\r\\n");\n'
-     '  }\n', True),
-    ("  HotkeyTriggered = NULL;",
-     '  if (gST->ConOut != NULL) {\n'
-     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-ENTRY\\r\\n");\n'
-     '  }\n', True),
+    ("  EFI_HANDLE  Handle;", INIT_CODE, True),
+    ("  HotkeyTriggered = NULL;", ENTRY_CODE, True),
 ]
 
 
@@ -151,7 +158,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_bds: меток %d (цифры + текстовые)" % added)
+    print("paint_bds: маркеров %d (цифры + полосы-признаки)" % added)
     return 0
 
 
