@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — дискретные метки внутри BdsDxe.
+paint_bds.py — дискретные метки в BdsDxe.
 
-Раньше метки рисовали белую область «от верха экрана», из-за чего сливались
-с метками других модулей и с очисткой экрана. Теперь каждая метка — отдельная
-полоска на своей строке, и по фото однозначно видно, какие шаги выполнены.
+Все метки — отдельные горизонтальные полоски на своих строках, поэтому по фото
+однозначно видно, какие шаги выполнены (полосы не сливаются).
 
-Полоски (24bpp, stride 2160, база 0x90000000-256), шаг 100 строк:
+Строки экрана (24bpp, stride 2160, база 0x90000000-256):
 
-    60  — BdsEntry начался
-    160 — строка DEBUG пройдена
-    260 — перед LocateProtocol(VariablePolicy)
-    360 — перед InitializeHwErrRecSupport()
-    460 — перед инициализацией BootOptionSupport
-    560 — перед кэшированием BootNext
-    660 — перед PlatformBootManagerBeforeConsole()
-    760 — после PlatformBootManagerBeforeConsole()
-    860 — после PlatformBootManagerAfterConsole()
+    20..34   — BdsInitialize: точка входа (драйвер BdsDxe начал работу)
+    40..54   — BdsInitialize: установка gEfiBdsArchProtocolGuid выполнена
+    --- далее шаги BdsEntry, шаг 100 строк ---
+    60..89   — BdsEntry начался
+    160..189 — строка DEBUG пройдена
+    260..289 — перед LocateProtocol(VariablePolicy)
+    360..389 — перед InitializeHwErrRecSupport
+    460..489 — перед инициализацией BootOptionSupport
+    560..589 — перед кэшированием BootNext
+    660..689 — перед PlatformBootManagerBeforeConsole
+    760..789 — после PlatformBootManagerBeforeConsole
+    860..889 — после PlatformBootManagerAfterConsole
 
 Идемпотентно.
 """
@@ -51,10 +53,34 @@ MsmPaintBdsStep (
   }
 }
 
+//
+// Метка точки входа BdsDxe: строки 20 + Idx*20 .. +15
+//
+STATIC
+VOID
+MsmPaintInitMark (
+  IN UINTN  Idx
+  )
+{
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  Y;
+  UINTN  X;
+  UINT8  *Row;
+
+  for (Y = 20 + Idx * 20; Y < 20 + Idx * 20 + 15; Y++) {
+    Row = Base + Y * 2160;
+    for (X = 0; X < 2160; X++) {
+      Row[X] = 0xFF;
+    }
+  }
+}
+
 '''
 
-# (якорь, номер шага, ставить ДО якоря?)
+# (якорь, шаг: int для BdsEntry или "initN" для точки входа, ставить ДО якоря?)
 HOOKS = [
+    ("  EFI_HANDLE  Handle;", "init0", True),
+    ("  Status = gBS->InstallMultipleProtocolInterfaces (", "init1", True),
     ("  HotkeyTriggered = NULL;", 0, True),
     ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 1, False),
     ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 2, True),
@@ -81,17 +107,25 @@ def main():
         print("paint_bds: уже пропатчено")
         return 0
 
-    anchor_fn = "VOID\nEFIAPI\nBdsEntry ("
-    if anchor_fn not in src:
-        sys.exit("paint_bds: не найден BdsEntry")
-    src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
+    # helper вставляем перед определением BdsInitialize (первая из функций)
+    anchor_fn = "EFI_STATUS\nEFIAPI\nBdsInitialize ("
+    if anchor_fn in src:
+        src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
+    else:
+        anchor_fn = "VOID\nEFIAPI\nBdsEntry ("
+        if anchor_fn not in src:
+            sys.exit("paint_bds: не найдены ни BdsInitialize, ни BdsEntry")
+        src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
 
     added = 0
     for anchor, step, before in HOOKS:
         if anchor not in src:
-            print("  !! не найден якорь для шага %d: %s" % (step, anchor.strip()[:55]))
+            print("  !! не найден якорь: %s" % anchor.strip()[:55])
             continue
-        call = "  MsmPaintBdsStep (%d);" % step
+        if isinstance(step, str) and step.startswith("init"):
+            call = "  MsmPaintInitMark (%s);" % step[4:]
+        else:
+            call = "  MsmPaintBdsStep (%d);" % step
         repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         added += 1

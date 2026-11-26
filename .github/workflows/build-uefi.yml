@@ -80,6 +80,9 @@ jobs:
       - name: Метки внутри BDS
         run: python fw/patches/paint_bds.py em
 
+      - name: Метка передачи управления BDS
+        run: python fw/patches/paint_dxemain.py em
+
       - name: Счётчик запускаемых драйверов
         run: python fw/patches/paint_dispatcher.py em
 

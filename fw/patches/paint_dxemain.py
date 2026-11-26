@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_dxemain.py — «прогресс-бар» внутри ядра DXE (Common/edk2).
+paint_dxemain.py — метка передачи управления от ядра DXE к BDS.
 
-Нужен, когда BDS не запускается и непонятно, где останавливается DXE.
-Полосы (24bpp, stride 2160, база 0x90000000-256):
-
-    150 — DxeMain дошёл до CoreInitializeDispatcher()
-    300 — CoreDispatcher() завершился (все драйверы отработали)
-    450 — перед вызовом gBds->Entry(gBds)
-
-Трактовка:
-    нет 150      -> DXE-ядро падает в самом начале (HOB/память/GCD)
-    150 без 300  -> диспетчеризация не завершилась: какой-то драйвер завис/упал
-    300 без 450  -> между диспетчеризацией и вызовом BDS (подготовка BDS)
-    450 есть     -> BDS вызван; если экран пуст — виноват уже BDS/консоль
+Ставит одну полоску в самом верху экрана (строки 0..14) непосредственно перед
+вызовом gBds->Entry (gBds). Если полоска есть, а меток BDS нет — значит ядро
+дошло до вызова, и проблема внутри BDS (либо gBds указывает в никуда).
 
 Идемпотентно.
 """
@@ -22,16 +13,16 @@ paint_dxemain.py — «прогресс-бар» внутри ядра DXE (Comm
 import os
 import sys
 
-MARK = "MsmPaintProgressDxe"
+MARK = "MsmPaintDxeHandoff"
 
 HELPER = r'''
 //
-// Отладка без UART: прогресс внутри ядра DXE (fw/patches/paint_dxemain.py)
+// Отладка без UART: перед передачей управления в BDS (fw/patches/paint_dxemain.py)
 //
 STATIC
 VOID
-MsmPaintProgressDxe (
-  IN UINTN  Rows
+MsmPaintDxeHandoff (
+  VOID
   )
 {
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
@@ -39,7 +30,7 @@ MsmPaintProgressDxe (
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = 0; Y < Rows; Y++) {
+  for (Y = 0; Y < 14; Y++) {
     Row = Base + Y * 2160;
     for (X = 0; X < 2160; X++) {
       Row[X] = 0xFF;
@@ -49,11 +40,8 @@ MsmPaintProgressDxe (
 
 '''
 
-HOOKS = [
-    ("  CoreInitializeDispatcher ();", "  MsmPaintProgressDxe (150);", True),
-    ("  CoreDispatcher ();", "  MsmPaintProgressDxe (300);", False),
-    ("  gBds->Entry (gBds);", "  MsmPaintProgressDxe (450);", True),
-]
+ANCHOR = "  gBds->Entry (gBds);"
+CALL = "  MsmPaintDxeHandoff ();\n"
 
 
 def main():
@@ -70,26 +58,18 @@ def main():
         print("paint_dxemain: уже пропатчено")
         return 0
 
-    anchor = "VOID\nEFIAPI\nDxeMain ("
-    if anchor not in src:
-        sys.exit("paint_dxemain: не найден DxeMain")
-    src = src.replace(anchor, HELPER + anchor, 1)
+    if ANCHOR not in src:
+        sys.exit("paint_dxemain: не найден вызов gBds->Entry")
 
-    n = 0
-    for anchor, call, before in HOOKS:
-        if anchor not in src:
-            print("  !! не найден якорь: %s" % anchor.strip()[:50])
-            continue
-        repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
-        src = src.replace(anchor, repl, 1)
-        n += 1
-
-    if n == 0:
-        sys.exit("paint_dxemain: ни одной точки не найдено")
+    anchor_fn = "VOID\nEFIAPI\nDxeMain ("
+    if anchor_fn not in src:
+        sys.exit("paint_dxemain: не найдено определение DxeMain")
+    src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
+    src = src.replace(ANCHOR, CALL + ANCHOR, 1)
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_dxemain: точек %d" % n)
+    print("paint_dxemain: метка передачи управления добавлена")
     return 0
 
 
