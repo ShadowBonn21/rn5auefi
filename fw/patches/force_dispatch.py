@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-force_dispatch.py — форсировать запуск всех обнаруженных драйверов.
+force_dispatch.py — запустить каждый обнаруженный драйвер РОВНО ОДИН раз,
+игнорируя Depex (режим bring-up).
 
-Проблема: на устройстве диспетчер DXE запускает только часть драйверов
-(например, 11 из 15), причём ошибок ни при загрузке, ни при запуске нет.
-Драйверы с Depex = TRUE (в частности BdsDxe) при этом тоже не запускаются,
-что для штатного алгоритма ненормально.
+Зачем: на устройстве штатный диспетчер запускает не все драйверы (11 из 15),
+причём ни ошибок загрузки, ни ошибок запуска нет. Среди не запущенных
+оказывается BdsDxe (у него Depex = TRUE), из-за чего UEFI не доходит до BDS
+и консоль не поднимается.
 
-Для bring-up это лечится принудительной планировкой: в CoreDispatcher
-условие «Depex выполнен» заменяется на истину, и все обнаруженные драйверы
-получают попытку запуска. Если какой-то драйвер действительно требует
-отсутствующий протокол, он вернёт ошибку — но остальные запустятся.
+ВАЖНО: первая версия этого патча заменяла проверку Depex на TRUE и приводила
+к бесконечному перезапуску уже запущенных драйверов (симптом: BdsInitialize
+выполнялся многократно, а BdsEntry так и не наступал). Здесь условие другое —
+запускаем только ещё НЕ инициализированные драйверы, поэтому цикл конечен.
 
 Идемпотентно.
 """
@@ -19,11 +20,32 @@ force_dispatch.py — форсировать запуск всех обнару�
 import os
 import sys
 
-MARK = "ugg: форсируем запуск"
+MARK = "ugg: запускаем каждый драйвер один раз"
 
 OLD = """      if (DriverEntry->Dependent) {
-        if (CoreIsSchedulable (DriverEntry)) {"""
-NEW = """      if (DriverEntry->Dependent) {
+        if (CoreIsSchedulable (DriverEntry)) {
+          CoreInsertOnScheduledQueueWhileProcessingBeforeAndAfter (DriverEntry);
+          ReadyToRun = TRUE;
+        }
+      } else {
+        if (DriverEntry->Unrequested) {
+          DEBUG ((DEBUG_DISPATCH, "Evaluate DXE DEPEX for FFS(%g)\\n", &DriverEntry->FileName));
+          DEBUG ((DEBUG_DISPATCH, "  SOR                                             = Not Requested\\n"));
+          DEBUG ((DEBUG_DISPATCH, "  RESULT = FALSE\\n"));
+        }
+      }"""
+
+NEW = """      //
+      // ugg: см. fw/patches/force_dispatch.py — запускаем драйвер один раз,
+      // не глядя на Depex. Флаг Initialized не даёт перезапускать его снова,
+      // поэтому цикл диспетчера остаётся конечным.
+      //
+      if (!DriverEntry->Initialized) {
+        CoreInsertOnScheduledQueueWhileProcessingBeforeAndAfter (DriverEntry);
+        ReadyToRun = TRUE;
+      }"""
+
+OLD_V1 = """      if (DriverEntry->Dependent) {
         if (TRUE) {  /* ugg: форсируем запуск, см. fw/patches/force_dispatch.py */"""
 
 
@@ -42,12 +64,12 @@ def main():
         return 0
 
     if OLD not in src:
-        sys.exit("force_dispatch: не найден участок проверки Depex")
+        sys.exit("force_dispatch: не найден участок планировки драйверов (ожидался штатный вид)")
 
     src = src.replace(OLD, NEW, 1)
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("force_dispatch: условие Depex заменено на TRUE")
+    print("force_dispatch: включён однократный запуск всех драйверов")
     return 0
 
 
