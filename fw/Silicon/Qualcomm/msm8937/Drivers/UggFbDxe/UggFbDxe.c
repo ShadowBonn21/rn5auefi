@@ -359,6 +359,196 @@ UggDrawText (
   }
 }
 
+/*
+  Собственный EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL.
+
+  Зачем: штатный GraphicsConsoleDxe на этом устройстве не подключается к нашему
+  GOP, из-за чего gST->ConOut существует, но ничего не рисует (OutputString
+  возвращает успех и молчит). Своя реализация текстового вывода делает консоль
+  UEFI настоящей: BDS, Shell и загрузчики печатают через неё, а мы рисуем текст
+  своим шрифтом прямо в framebuffer.
+*/
+#define UGG_COLS  80
+#define UGG_ROWS  50
+#define UGG_CHAR_W 9
+#define UGG_CHAR_H 13
+
+STATIC UINTN                           mUggCursorX = 0;
+STATIC UINTN                           mUggCursorY = 0;
+STATIC EFI_SIMPLE_TEXT_OUTPUT_MODE     mUggTextMode = {
+  1, 0, EFI_LIGHTGRAY | EFI_BACKGROUND_BLACK, 0, 0
+};
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextReset (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN BOOLEAN                          ExtendedVerification
+  )
+{
+  (VOID)ExtendedVerification;
+  mUggCursorX = 0;
+  mUggCursorY = 0;
+  return EFI_SUCCESS;
+}
+
+STATIC
+VOID
+UggTextNewLine (
+  VOID
+  )
+{
+  mUggCursorX = 0;
+  mUggCursorY++;
+  if (mUggCursorY >= UGG_ROWS) {
+    mUggCursorY = UGG_ROWS - 1;
+  }
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextOutputString (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN CHAR16                           *String
+  )
+{
+  UINT8  Ch;
+
+  if (String == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  while (*String != 0) {
+    if (*String == L'\r') {
+      mUggCursorX = 0;
+    } else if (*String == L'\n') {
+      UggTextNewLine ();
+    } else if (*String == L'\b') {
+      if (mUggCursorX > 0) {
+        mUggCursorX--;
+      }
+    } else {
+      Ch = (UINT8)(*String & 0xFF);
+      if (mUggCursorX >= UGG_COLS) {
+        UggTextNewLine ();
+      }
+      UggDrawChar (24 + mUggCursorX * UGG_CHAR_W, 20 + mUggCursorY * UGG_CHAR_H, Ch);
+      mUggCursorX++;
+    }
+    String++;
+  }
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextTestString (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN CHAR16                           *String
+  )
+{
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextQueryMode (
+  IN  EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN  UINTN                            ModeNumber,
+  OUT UINTN                            *Columns,
+  OUT UINTN                            *Rows
+  )
+{
+  if (ModeNumber != 0) {
+    return EFI_UNSUPPORTED;
+  }
+  *Columns = UGG_COLS;
+  *Rows    = UGG_ROWS;
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextSetMode (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN UINTN                            ModeNumber
+  )
+{
+  return (ModeNumber == 0) ? EFI_SUCCESS : EFI_UNSUPPORTED;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextSetAttribute (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN UINTN                            Attribute
+  )
+{
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextClearScreen (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This
+  )
+{
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+  UINTN                          Width  = FixedPcdGet32 (PcdMipiFrameBufferWidth);
+  UINTN                          Height = FixedPcdGet32 (PcdMipiFrameBufferHeight);
+
+  FbFillRect (0, 0, Width, Height, &Black);
+  mUggCursorX = 0;
+  mUggCursorY = 0;
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextSetCursorPosition (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN UINTN                            Column,
+  IN UINTN                            Row
+  )
+{
+  mUggCursorX = (Column < UGG_COLS) ? Column : UGG_COLS - 1;
+  mUggCursorY = (Row < UGG_ROWS) ? Row : UGG_ROWS - 1;
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggTextEnableCursor (
+  IN EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *This,
+  IN BOOLEAN                          Visible
+  )
+{
+  mUggTextMode.CursorVisible = Visible;
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  mUggTextOut = {
+  UggTextReset,
+  UggTextOutputString,
+  UggTextTestString,
+  UggTextQueryMode,
+  UggTextSetMode,
+  UggTextSetAttribute,
+  UggTextClearScreen,
+  UggTextSetCursorPosition,
+  UggTextEnableCursor,
+  &mUggTextMode
+};
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -435,6 +625,8 @@ UggFbDxeInitialize (
                   &Handle,
                   &gEfiGraphicsOutputProtocolGuid,
                   &mUggFb.Gop,
+                  &gEfiSimpleTextOutProtocolGuid,
+                  &mUggTextOut,
                   &gEfiDevicePathProtocolGuid,
                   (EFI_DEVICE_PATH_PROTOCOL *)mFbDevicePath,
                   NULL

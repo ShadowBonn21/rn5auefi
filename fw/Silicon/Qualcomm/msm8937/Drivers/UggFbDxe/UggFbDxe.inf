@@ -30,6 +30,7 @@
   PcdLib
 
 [Protocols]
+  gEfiSimpleTextOutProtocolGuid
   gEfiGraphicsOutputProtocolGuid        ## PRODUCES
   gEfiDevicePathProtocolGuid            ## PRODUCES
 
