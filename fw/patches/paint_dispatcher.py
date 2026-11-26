@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_dispatcher.py — «цифровой счётчик» драйверов в диспетчере DXE.
+paint_dispatcher.py — счётчики диспетчера DXE без UART.
 
-Перед запуском каждого драйвера рисует его порядковый номер семисегментными
-цифрами в левом верхнем углу (24bpp, stride 2160, база 0x90000000-256).
+Что рисуется (24bpp, stride 2160, база 0x90000000-256):
 
-Почему так: высота полосы зависела от порядка разрешения Depex и «плыла»,
-а число читается однозначно. После того как UggFbDxe очищает экран, счётчик
-перерисовывается для каждого следующего драйвера, поэтому на экране остаётся
-номер того драйвера, на котором диспетчеризация остановилась.
+  * СЕМИСЕГМЕНТНЫЕ ЦИФРЫ в левом верхнем углу (x=10 и x=60, y=10) —
+    количество ЗАПУЩЕННЫХ драйверов (обновляется перед каждым запуском).
+
+  * ТАКИЕ ЖЕ ЦИФРЫ правее (x=150 и x=200, y=10) — количество ОБНАРУЖЕННЫХ
+    драйверов (рисуется в конце CoreDispatcher). Разница между числами
+    показывает, сколько драйверов диспетчер не смог загрузить.
+
+  * ШТРИХКОД GUID последнего запускаемого драйвера (8 столбцов x 16 строк,
+    клетка 40 px, начиная с (40,200)) — расшифровывается по фото.
 
 Идемпотентно.
 """
@@ -21,8 +25,7 @@ MARK = "MsmPaintDriverNumber"
 
 HELPER = r'''
 //
-// Отладка без UART: номер запускаемого драйвера семисегментными цифрами
-// (fw/patches/paint_dispatcher.py; ugg: 24bpp, stride 2160, база -256)
+// Отладка без UART: счётчики диспетчера DXE (fw/patches/paint_dispatcher.py)
 //
 STATIC UINTN  mUggDispatchCount = 0;
 
@@ -46,8 +49,6 @@ MsmPaintDigit (
   UINTN  Row;
   UINTN  Col;
   UINT8  *Ptr;
-
-  /* сегмент: смещение по X, Y, ширина, высота */
   CONST UINTN  Rect[7][4] = {
     { 0, 0, W, T },                 /* a */
     { W - T, 0, T, H / 2 },         /* b */
@@ -76,6 +77,50 @@ MsmPaintDigit (
 
 STATIC
 VOID
+MsmPaintDriverNumber (
+  VOID
+  )
+{
+  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  N = ++mUggDispatchCount;
+  UINTN  Row;
+  UINTN  Col;
+  UINT8  *Ptr;
+
+  /* стереть область под двумя цифрами */
+  for (Row = 0; Row < 100; Row++) {
+    Ptr = Base + Row * 2160;
+    for (Col = 0; Col < 260; Col++) {
+      Ptr[Col * 3 + 0] = 0x00;
+      Ptr[Col * 3 + 1] = 0x00;
+      Ptr[Col * 3 + 2] = 0x00;
+    }
+  }
+
+  MsmPaintDigit (10, 10, (N / 10) % 10);
+  MsmPaintDigit (60, 10, N % 10);
+}
+
+STATIC
+VOID
+MsmPaintDiscoveredCount (
+  VOID
+  )
+{
+  LIST_ENTRY  *Link;
+  UINTN        Count = 0;
+
+  for (Link = mDiscoveredList.ForwardLink; Link != &mDiscoveredList; Link = Link->ForwardLink) {
+    Count++;
+  }
+
+  /* правее: количество обнаруженных драйверов */
+  MsmPaintDigit (150, 10, (Count / 10) % 10);
+  MsmPaintDigit (200, 10, Count % 10);
+}
+
+STATIC
+VOID
 MsmPaintGuid (
   IN EFI_GUID  *Guid
   )
@@ -92,7 +137,6 @@ MsmPaintGuid (
   UINT8  *Ptr;
   UINT8  Bit;
 
-  /* рамка 4 px вокруг блока 8x16 клеток */
   for (Row = 0; Row < Cell * 16 + 8; Row++) {
     Ptr = Base + (OY - 4 + Row) * 2160 + (OX - 4) * 3;
     for (Col = 0; Col < Cell * 8 + 8; Col++) {
@@ -104,7 +148,6 @@ MsmPaintGuid (
     }
   }
 
-  /* 16 байт GUID: строка = байт, 8 клеток = биты (старший слева) */
   for (I = 0; I < 16; I++) {
     for (B = 0; B < 8; B++) {
       Bit = (UINT8)((G[I] >> (7 - B)) & 1);
@@ -119,37 +162,11 @@ MsmPaintGuid (
     }
   }
 }
-STATIC
-VOID
-MsmPaintDriverNumber (
-  VOID
-  )
-{
-  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  N = ++mUggDispatchCount;
-  UINTN  Row;
-  UINTN  Col;
-  UINT8  *Ptr;
-
-  /* стереть область 0..X=260, 0..Y=100 (чёрным) */
-  for (Row = 0; Row < 100; Row++) {
-    Ptr = Base + Row * 2160;
-    for (Col = 0; Col < 260; Col++) {
-      Ptr[Col * 3 + 0] = 0x00;
-      Ptr[Col * 3 + 1] = 0x00;
-      Ptr[Col * 3 + 2] = 0x00;
-    }
-  }
-
-  /* десятки слева, единицы справа */
-  MsmPaintDigit (10, 10, (N / 10) % 10);
-  MsmPaintDigit (60, 10, N % 10);
-}
 
 '''
 
-ANCHOR = "        Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);"
-CALL = "        MsmPaintDriverNumber ();\n        MsmPaintGuid (&DriverEntry->FileName);\n"
+ANCHOR_START = "        Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);"
+ANCHOR_END = "  CoreCloseEvent (DxeDispatchEvent);"
 
 
 def main():
@@ -166,8 +183,10 @@ def main():
         print("paint_dispatcher: уже пропатчено")
         return 0
 
-    if ANCHOR not in src:
-        sys.exit("paint_dispatcher: не найден вызов CoreStartImage в CoreDispatcher")
+    if ANCHOR_START not in src:
+        sys.exit("paint_dispatcher: не найден вызов CoreStartImage")
+    if ANCHOR_END not in src:
+        sys.exit("paint_dispatcher: не найден CoreCloseEvent в конце CoreDispatcher")
 
     anchor_fn = "EFI_STATUS\nEFIAPI\nCoreDispatcher ("
     idx = src.find(anchor_fn)
@@ -175,10 +194,17 @@ def main():
         sys.exit("paint_dispatcher: не найдено определение CoreDispatcher")
     src = src[:idx] + HELPER + src[idx:]
 
-    src = src.replace(ANCHOR, CALL + ANCHOR, 1)
+    src = src.replace(
+        ANCHOR_START,
+        "        MsmPaintDriverNumber ();\n"
+        "        MsmPaintGuid (&DriverEntry->FileName);\n" + ANCHOR_START,
+        1,
+    )
+    src = src.replace(ANCHOR_END, "  MsmPaintDiscoveredCount ();\n" + ANCHOR_END, 1)
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_dispatcher: цифровой счётчик добавлен")
+    print("paint_dispatcher: добавлены счётчик запусков, счётчик обнаруженных и штрихкод")
     return 0
 
 
