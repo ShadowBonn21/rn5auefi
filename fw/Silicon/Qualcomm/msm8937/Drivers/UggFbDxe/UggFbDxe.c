@@ -345,8 +345,14 @@ UggFbDxeInitialize (
   mUggFb.Gop.Blt       = UggFbBlt;
   mUggFb.Gop.Mode      = &mUggFb.Mode;
 
-  /* Экран чистый: иначе на нём останется сплэш LK под текстом консоли. */
-  FbFillRect (0, 0, Width, Height, &Black);
+  /*
+    Экран чистый: иначе на нём останется сплэш LK под текстом консоли.
+    При PcdDebugStageBands == 3 очистку НЕ делаем — это нужно для диагностики:
+    тогда на экране остаются все метки, нарисованные ДО нашего драйвера.
+  */
+  if (FixedPcdGet32 (PcdDebugStageBands) != 3) {
+    FbFillRect (0, 0, Width, Height, &Black);
+  }
 
   /*
     Отладка (PcdDebugStageBands):
