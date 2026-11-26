@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_dispatcher.py — счётчики диспетчера DXE цифрами (без UART).
+paint_dispatcher.py — состояние диспетчера DXE цифрами (без UART).
 
 Раскладка цифр в верхней строке экрана (y=10, семисегментные, 36x72, шаг 50):
 
-    10, 60        — запущено драйверов
+    10, 60        — попыток запуска драйверов (CoreStartImage)
     110, 160      — обнаружено драйверов
-    210, 260      — индекс последнего ЗАПУЩЕННОГО драйвера
-    460, 510, 560 — индекс драйвера, который НЕ УДАЛОСЬ ЗАГРУЗИТЬ (если был)
-    620, 670      — сколько всего драйверов не загрузилось
+    210, 260      — индекс последнего запускаемого драйвера
+    310, 360      — индекс драйвера, который НЕ УДАЛОСЬ ЗАГРУЗИТЬ (LoadImage)
+    410, 460      — индекс драйвера, у которого НЕ УДАЛСЯ ЗАПУСК (StartImage)
+    510, 560, 610 — код ошибки запуска (младший байт EFI_STATUS)
 
-Индекс — позиция драйвера в списке обнаружения (порядок файлов в FV,
-среди файлов типа DXE_DRIVER/DRIVER; приложения и DXE-ядро не считаются).
+Индекс — позиция в списке обнаружения (порядок файлов в FV).
 
 Идемпотентно.
 """
@@ -27,8 +27,6 @@ HELPER = r'''
 // Отладка без UART: цифры диспетчера DXE (fw/patches/paint_dispatcher.py)
 //
 STATIC UINTN  mUggDispatchCount = 0;
-STATIC UINTN  mUggLoadFailCount = 0;
-STATIC UINTN  mUggLoadFailIndex = 0;
 
 STATIC
 VOID
@@ -142,15 +140,28 @@ MsmPaintLoadFailure (
   IN EFI_CORE_DRIVER_ENTRY  *DriverEntry
   )
 {
-  mUggLoadFailCount++;
-  mUggLoadFailIndex = MsmDriverIndex (DriverEntry);
+  UINTN  Index = MsmDriverIndex (DriverEntry);
 
-  MsmPaintDigit (460, 10, (mUggLoadFailIndex / 100) % 10);
-  MsmPaintDigit (510, 10, (mUggLoadFailIndex / 10) % 10);
-  MsmPaintDigit (560, 10, mUggLoadFailIndex % 10);
+  MsmPaintDigit (310, 10, (Index / 10) % 10);
+  MsmPaintDigit (360, 10, Index % 10);
+}
 
-  MsmPaintDigit (620, 10, (mUggLoadFailCount / 10) % 10);
-  MsmPaintDigit (670, 10, mUggLoadFailCount % 10);
+STATIC
+VOID
+MsmPaintStartFailure (
+  IN EFI_CORE_DRIVER_ENTRY  *DriverEntry,
+  IN EFI_STATUS              Status
+  )
+{
+  UINTN  Index = MsmDriverIndex (DriverEntry);
+  UINTN  Code  = (UINTN)(Status & 0xFF);
+
+  MsmPaintDigit (410, 10, (Index / 10) % 10);
+  MsmPaintDigit (460, 10, Index % 10);
+
+  MsmPaintDigit (510, 10, (Code / 100) % 10);
+  MsmPaintDigit (560, 10, (Code / 10) % 10);
+  MsmPaintDigit (610, 10, Code % 10);
 }
 
 '''
@@ -188,6 +199,17 @@ def main():
     src = src[:idx] + HELPER + src[idx:]
 
     src = src.replace(ANCHOR_START, "        MsmPaintDriverNumber (DriverEntry);\n" + ANCHOR_START, 1)
+
+    # после запуска: если ошибка — показать индекс и код
+    src = src.replace(
+        ANCHOR_START + "\n",
+        ANCHOR_START + "\n"
+        "        if (EFI_ERROR (Status)) {\n"
+        "          MsmPaintStartFailure (DriverEntry, Status);\n"
+        "        }\n",
+        1,
+    )
+
     src = src.replace(ANCHOR_END, "  MsmPaintDiscoveredCount ();\n" + ANCHOR_END, 1)
     src = src.replace(
         ANCHOR_FAIL,
@@ -197,7 +219,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_dispatcher: цифры (запущено/обнаружено/индекс/сбой загрузки)")
+    print("paint_dispatcher: цифры (попытки/обнаружено/индекс/ошибки загрузки и запуска)")
     return 0
 
 
