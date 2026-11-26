@@ -50,18 +50,18 @@ READ_LOCK_STATUS   = TRUE
 
   INF MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf
 
-  INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf
-  INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf
-  INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf
+# INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
   INF EmbeddedPkg/RealTimeClockRuntimeDxe/RealTimeClockRuntimeDxe.inf
 # INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf   # ВРЕМЕННО: тест без статус-кодов
 # INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf   # ВРЕМЕННО: тест без статус-кодов
-  INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf
+# INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
 
   # Консоль: framebuffer (наследуется от LK) + опционально UART
 # INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
-INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
-INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
+  INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
+  INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
   INF MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
 # INF MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
 
@@ -78,10 +78,10 @@ INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
 
   # ── Диски: нужен драйвер SDCC (eMMC) — СЕЙЧАС ОТСУТСТВУЕТ ──────────────
   # Без него UEFI не увидит ни одного раздела. См. docs/02-bringup-plan.md, G3.
-INF MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf
-INF MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf
-INF FatPkg/EnhancedFatDxe/Fat.inf
-INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
+# INF MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF FatPkg/EnhancedFatDxe/Fat.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
 
   # ── USB host ───────────────────────────────────────────────────────────
 # INF MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBusDxe.inf   # ВРЕМЕННО: поиск зависшего драйвера
@@ -97,13 +97,13 @@ INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
 # INF MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf   # ВРЕМЕННО: поиск зависшего драйвера
 # INF MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf   # ВРЕМЕННО: поиск зависшего драйвера
 # INF MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf   # ВРЕМЕННО: поиск зависшего драйвера
-INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
-INF MdeModulePkg/Application/UiApp/UiApp.inf
-INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf
+  INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
+# INF MdeModulePkg/Application/UiApp/UiApp.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf   # ВРЕМЕННО: минимальная сборка (консоль)
 
   # UEFI Shell + SimpleInit (GUI-загрузчик, как на остальных устройствах Renegade)
-INF ShellPkg/Application/Shell/Shell.inf
-INF src/main/SimpleInitMain.inf
+# INF ShellPkg/Application/Shell/Shell.inf   # ВРЕМЕННО: минимальная сборка (консоль)
+# INF src/main/SimpleInitMain.inf   # ВРЕМЕННО: минимальная сборка (консоль)
 
 
 # Device specific fdf
