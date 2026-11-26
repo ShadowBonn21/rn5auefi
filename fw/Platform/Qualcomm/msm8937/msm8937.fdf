@@ -49,13 +49,13 @@ READ_LOCK_STATUS   = TRUE
 
   INF MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf
 
-  # INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf   # выключено профилем
-  # INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf   # выключено профилем
-  # INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf   # выключено профилем
+  INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf
+  INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf
+  INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf
   INF EmbeddedPkg/RealTimeClockRuntimeDxe/RealTimeClockRuntimeDxe.inf
-  # INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf   # выключено профилем
-  # INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf   # выключено профилем
-  # INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf   # выключено профилем
+  INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
+  INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf
+  INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf
 
   # Консоль: framebuffer (наследуется от LK) + опционально UART
   # INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf   # выключено профилем
@@ -88,9 +88,9 @@ READ_LOCK_STATUS   = TRUE
   # INF MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf   # выключено профилем
 
   # ── FDT / SMBIOS / BDS ─────────────────────────────────────────────────
-  # INF EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf   # выключено профилем
-  # INF Platform/RenegadePkg/Drivers/PlatformSmbiosDxe/PlatformSmbiosDxe.inf   # выключено профилем
-  # INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf   # выключено профилем
+  INF EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf
+  INF Platform/RenegadePkg/Drivers/PlatformSmbiosDxe/PlatformSmbiosDxe.inf
+  INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
   # INF MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf   # выключено профилем
   # INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf   # выключено профилем
   # INF MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf   # выключено профилем
