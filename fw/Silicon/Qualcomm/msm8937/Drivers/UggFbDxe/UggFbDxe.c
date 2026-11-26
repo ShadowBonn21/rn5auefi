@@ -350,7 +350,7 @@ UggFbDxeInitialize (
     При PcdDebugStageBands == 3 очистку НЕ делаем — это нужно для диагностики:
     тогда на экране остаются все метки, нарисованные ДО нашего драйвера.
   */
-  if (FixedPcdGet32 (PcdDebugStageBands) != 3) {
+  if ((FixedPcdGet32 (PcdDebugStageBands) != 3) && (FixedPcdGet32 (PcdDebugStageBands) != 4)) {
     FbFillRect (0, 0, Width, Height, &Black);
   }
 
@@ -389,6 +389,43 @@ UggFbDxeInitialize (
       FbFillRect (0, 1100, Width, 40, &White);
     } else {
       FbFillRect (0, 1200, Width, 40, &White);
+    }
+  }
+
+  /*
+    Режим 4: проверка GOP.Blt — консоль рисует текст именно через него,
+    а прямая заливка (наш «крест») этот путь не проверяет.
+    Рисуем через Blt белый квадрат 100x100 в (200,300) из буфера пикселей.
+    Если квадрат виден — Blt работает, и текст консоли обязан быть виден.
+    Если вместо белого квадрата появился красный в левом верхнем углу —
+    Blt вернул ошибку.
+  */
+  if (FixedPcdGet32 (PcdDebugStageBands) == 4) {
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL  *Buf;
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL  WhitePixel = { 0xFF, 0xFF, 0xFF, 0 };
+    EFI_STATUS                     BltStatus;
+    UINTN                          I;
+
+    Buf = AllocatePool (100 * 100 * sizeof (EFI_GRAPHICS_OUTPUT_BLT_PIXEL));
+    if (Buf != NULL) {
+      for (I = 0; I < 100 * 100; I++) {
+        Buf[I] = WhitePixel;
+      }
+      BltStatus = mUggFb.Gop.Blt (
+                    &mUggFb.Gop,
+                    Buf,
+                    EfiBltBufferToVideo,
+                    0, 0,
+                    200, 300,
+                    100, 100,
+                    0
+                    );
+      FreePool (Buf);
+      if (EFI_ERROR (BltStatus)) {
+        EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red = { 0x00, 0x00, 0xFF, 0 };
+
+        FbFillRect (0, 0, 100, 100, &Red);
+      }
     }
   }
 
