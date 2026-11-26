@@ -134,7 +134,7 @@ def main():
         if anchor not in src:
             print("  !! не найден якорь для шага %d: %s" % (step, anchor.strip()[:50]))
             continue
-        call = "  MsmPaintStepDigits (300, %d);" % step
+        call = "  MsmPaintStepDigits (210, %d);" % step
         repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         n += 1

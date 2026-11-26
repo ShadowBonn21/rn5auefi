@@ -92,16 +92,16 @@ MsmPaintBdsStep (
   IN UINTN  Step
   )
 {
-  MsmPaintBdsDigits (360, (Step / 10) % 10);
-  MsmPaintBdsDigits (410, Step % 10);
+  MsmPaintBdsDigits (260, (Step / 10) % 10);
+  MsmPaintBdsDigits (310, Step % 10);
 }
 
 '''
 
 # (якорь, шаг: int для BdsEntry или ("flag", x) для флагов, ставить ДО якоря?)
 HOOKS = [
-    ("  EFI_HANDLE  Handle;", ("flag", 500), True),
-    ("  Status = gBS->InstallMultipleProtocolInterfaces (", ("flag", 560), True),
+    ("  EFI_HANDLE  Handle;", ("flag", 360), True),
+    ("  Status = gBS->InstallMultipleProtocolInterfaces (", ("flag", 410), True),
     ("  HotkeyTriggered = NULL;", 0, True),
     ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 1, False),
     ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 2, True),

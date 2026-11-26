@@ -30,9 +30,9 @@ MsmPaintDxeHandoff (
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = 0; Y < 14; Y++) {
+  for (Y = 10; Y < 82; Y++) {
     Row = Base + Y * 2160;
-    for (X = 0; X < 2160; X++) {
+    for (X = 560; X < 596; X++) {
       Row[X] = 0xFF;
     }
   }
