@@ -105,17 +105,17 @@ INIT_CODE = (
     "  MsmPaintBdsDigit (660, 1);\n"
     "  if (gST->ConOut != NULL) {\n"
     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-INIT\\r\\n");\n'
-    "    MsmPaintBdsBar (200);\n"
+    "    MsmPaintBdsDigit (660, 2);\n"
     "  } else {\n"
-    "    MsmPaintBdsBar (260);\n"
+    "    MsmPaintBdsDigit (660, 3);\n"
     "  }\n"
 )
 
 ENTRY_CODE = (
-    "  MsmPaintBdsDigit (680, 1);\n"
+    "  MsmPaintBdsDigit (680, 4);\n"
     "  if (gST->ConOut != NULL) {\n"
     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-ENTRY\\r\\n");\n'
-    "    MsmPaintBdsBar (320);\n"
+    "    MsmPaintBdsDigit (680, 5);\n"
     "  }\n"
 )
 
