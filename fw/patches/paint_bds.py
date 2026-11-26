@@ -8,8 +8,8 @@ paint_bds.py — дискретные метки в BdsDxe.
 
 Строки экрана (24bpp, stride 2160, база 0x90000000-256):
 
-    20..34   — BdsInitialize: точка входа (драйвер BdsDxe начал работу)
-    40..54   — BdsInitialize: установка gEfiBdsArchProtocolGuid выполнена
+    1150..1167 — BdsInitialize: точка входа (драйвер BdsDxe начал работу)
+    1175..1192 — BdsInitialize: установка gEfiBdsArchProtocolGuid выполнена
     --- далее шаги BdsEntry, шаг 100 строк ---
     60..89   — BdsEntry начался
     160..189 — строка DEBUG пройдена
@@ -67,7 +67,7 @@ MsmPaintInitMark (
   UINTN  X;
   UINT8  *Row;
 
-  for (Y = 20 + Idx * 20; Y < 20 + Idx * 20 + 15; Y++) {
+  for (Y = 1150 + Idx * 25; Y < 1150 + Idx * 25 + 18; Y++) {
     Row = Base + Y * 2160;
     for (X = 0; X < 2160; X++) {
       Row[X] = 0xFF;
