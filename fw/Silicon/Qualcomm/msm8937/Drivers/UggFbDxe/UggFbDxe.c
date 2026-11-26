@@ -427,6 +427,18 @@ UggFbDxeInitialize (
         FbFillRect (0, 0, 100, 100, &Red);
       }
     }
+
+    /*
+      Проверка консольного стека БЕЗ участия BDS: подключаем контроллер к
+      нашему GOP-хэндлу (это запускает GraphicsConsoleDxe/ConSplitter) и
+      печатаем строку через gST->ConOut. Если строка видна — консоль
+      работает, и дальше можно строить свой минимальный UI, не завися от BDS.
+    */
+    gBS->ConnectController (Handle, NULL, NULL, TRUE);
+    if (gST->ConOut != NULL) {
+      gST->ConOut->OutputString (gST->ConOut, L"UGG-FB-CONSOLE-OK\r\n");
+      gST->ConOut->OutputString (gST->ConOut, L"second line\r\n");
+    }
   }
 
   ASSERT_EFI_ERROR (Status);
