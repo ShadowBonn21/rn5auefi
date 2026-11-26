@@ -69,6 +69,16 @@ GROUPS = {
         "MdeModulePkg/Bus/Usb/UsbMassStorageDxe/UsbMassStorageDxe.inf",
         "MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf",
     ],
+    "logo": [
+        "Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf",
+    ],
+    "shell": [
+        "ShellPkg/Application/Shell/Shell.inf",
+        "MdeModulePkg/Application/UiApp/UiApp.inf",
+    ],
+    "simpleinit": [
+        "src/main/SimpleInitMain.inf",
+    ],
     "apps": [
         "Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf",
         "ShellPkg/Application/Shell/Shell.inf",
