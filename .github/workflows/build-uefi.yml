@@ -74,6 +74,12 @@ jobs:
       - name: Убрать последовательную консоль из ConOut
         run: python fw/patches/no_serial_console.py em
 
+      - name: Цифры диспетчера DXE
+        run: python fw/patches/paint_dispatcher.py em
+
+      - name: Метки состояния BDS (цифры + текст)
+        run: python fw/patches/paint_bds.py em
+
       - name: CpuDxe — отключить SyncCacheConfig (виснет на нашей карте)
         run: python fw/patches/cpudxe_fix.py em
 

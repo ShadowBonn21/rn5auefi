@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_bds.py — состояние BDS как ЦИФРЫ в верхней строке экрана.
+paint_bds.py — два независимых сигнала о состоянии BDS.
 
-Полоски убраны: теперь на экране одна строка цифр (y=10):
+1. ЦИФРЫ (работают даже при сломанной консоли), верхняя строка, y=10:
+       x=360 — 1, если BdsInitialize (точка входа драйвера) начал работу
+       x=410 — 1, если BdsDxe установил gEfiBdsArchProtocolGuid
+       x=260/310 — шаг BdsEntry (0..8)
 
-    x=360, 410 — шаг BdsEntry (0..8), две цифры
-    x=500      — 1, если точка входа BdsDxe (BdsInitialize) начала работу
-    x=560      — 1, если BdsDxe установил gEfiBdsArchProtocolGuid
+2. ТЕКСТ в консоль (виден только если ConOut реально подключён к нашему GOP):
+       при входе в BdsInitialize печатается "UGG-BDS-INIT"
+       при входе в BdsEntry      печатается "UGG-BDS-ENTRY"
 
-Шаги BdsEntry:
-    0 — BdsEntry начался
-    1 — отладочная строка пройдена
-    2 — перед LocateProtocol(VariablePolicy)
-    3 — перед InitializeHwErrRecSupport
-    4 — перед инициализацией BootOptionSupport
-    5 — перед кэшированием BootNext
-    6 — перед PlatformBootManagerBeforeConsole
-    7 — после PlatformBootManagerBeforeConsole
-    8 — после PlatformBootManagerAfterConsole
+Это разом отвечает на вопрос: BDS не запускается (нет цифры) или запускается,
+но консоль никуда не выводит (цифра есть, текста нет).
 
 Идемпотентно.
 """
@@ -26,7 +21,7 @@ paint_bds.py — состояние BDS как ЦИФРЫ в верхней ст
 import os
 import sys
 
-MARK = "MsmPaintBdsStep"
+MARK = "MsmPaintBdsState"
 
 HELPER = r'''
 //
@@ -34,7 +29,7 @@ HELPER = r'''
 //
 STATIC
 VOID
-MsmPaintBdsDigits (
+MsmPaintBdsDigit (
   IN UINTN  X,
   IN UINTN  Digit
   )
@@ -43,10 +38,10 @@ MsmPaintBdsDigits (
     0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
   };
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
+  UINTN  Y0 = 10;
   UINTN  W = 36;
   UINTN  H = 72;
   UINTN  T = 7;
-  UINTN  Y0 = 10;
   UINTN  S = Seg[Digit % 10];
   UINTN  Row;
   UINTN  Col;
@@ -92,25 +87,34 @@ MsmPaintBdsStep (
   IN UINTN  Step
   )
 {
-  MsmPaintBdsDigits (260, (Step / 10) % 10);
-  MsmPaintBdsDigits (310, Step % 10);
+  MsmPaintBdsDigit (260, (Step / 10) % 10);
+  MsmPaintBdsDigit (310, Step % 10);
 }
 
 '''
 
-# (якорь, шаг: int для BdsEntry или ("flag", x) для флагов, ставить ДО якоря?)
 HOOKS = [
-    ("  EFI_HANDLE  Handle;", ("flag", 360), True),
-    ("  Status = gBS->InstallMultipleProtocolInterfaces (", ("flag", 410), True),
-    ("  HotkeyTriggered = NULL;", 0, True),
-    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', 1, False),
-    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", 2, True),
-    ("  InitializeHwErrRecSupport ();", 3, True),
-    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", 4, True),
-    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', 5, True),
-    ("  PlatformBootManagerBeforeConsole ();", 6, True),
-    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', 7, False),
-    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', 8, False),
+    # цифровые маркеры (видны всегда)
+    ("  EFI_HANDLE  Handle;", "  MsmPaintBdsDigit (360, 1);\n", True),
+    ("  Status = gBS->InstallMultipleProtocolInterfaces (", "  MsmPaintBdsDigit (410, 1);\n", True),
+    ("  HotkeyTriggered = NULL;", "  MsmPaintBdsStep (0);\n", True),
+    ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', "  MsmPaintBdsStep (1);\n", False),
+    ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", "  MsmPaintBdsStep (2);\n", True),
+    ("  InitializeHwErrRecSupport ();", "  MsmPaintBdsStep (3);\n", True),
+    ("  BootOptionSupport = EFI_BOOT_OPTION_SUPPORT_APP | EFI_BOOT_OPTION_SUPPORT_SYSPREP;", "  MsmPaintBdsStep (4);\n", True),
+    ('  // Cache the "BootNext" NV variable before calling any PlatformBootManagerLib APIs', "  MsmPaintBdsStep (5);\n", True),
+    ("  PlatformBootManagerBeforeConsole ();", "  MsmPaintBdsStep (6);\n", True),
+    ('  PERF_INMODULE_END ("PlatformBootManagerBeforeConsole");', "  MsmPaintBdsStep (7);\n", False),
+    ('  PERF_INMODULE_END ("PlatformBootManagerAfterConsole");', "  MsmPaintBdsStep (8);\n", False),
+    # текстовые метки (видны только при рабочем ConOut)
+    ("  EFI_HANDLE  Handle;",
+     '  if (gST->ConOut != NULL) {\n'
+     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-INIT\\r\\n");\n'
+     '  }\n', True),
+    ("  HotkeyTriggered = NULL;",
+     '  if (gST->ConOut != NULL) {\n'
+     '    gST->ConOut->OutputString (gST->ConOut, L"UGG-BDS-ENTRY\\r\\n");\n'
+     '  }\n', True),
 ]
 
 
@@ -134,15 +138,11 @@ def main():
     src = src.replace(anchor_fn, HELPER + anchor_fn, 1)
 
     added = 0
-    for anchor, step, before in HOOKS:
+    for anchor, code, before in HOOKS:
         if anchor not in src:
             print("  !! не найден якорь: %s" % anchor.strip()[:55])
             continue
-        if isinstance(step, tuple):
-            call = "  MsmPaintBdsDigits (%d, 1);" % step[1]
-        else:
-            call = "  MsmPaintBdsStep (%d);" % step
-        repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
+        repl = (code + anchor) if before else (anchor + "\n" + code)
         src = src.replace(anchor, repl, 1)
         added += 1
 
@@ -151,7 +151,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_bds: цифровых меток %d" % added)
+    print("paint_bds: меток %d (цифры + текстовые)" % added)
     return 0
 
 

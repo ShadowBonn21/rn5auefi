@@ -43,6 +43,7 @@ PATCHES = [
     ("null_serial.py", "Silicon/Qualcomm/QcomPkg/QcomCommonDsc.inc"),
     ("no_serial_console.py", "Platform/RenegadePkg/Library/PlatformBootManagerLib/PlatformBm.c"),
     ("paint_dispatcher.py", "Common/edk2/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c"),
+    ("paint_bds.py", "Common/edk2/MdeModulePkg/Universal/BdsDxe/BdsEntry.c"),
     ("cpudxe_fix.py", "Common/edk2/ArmPkg/Drivers/CpuDxe/CpuDxe.c"),
 ]
 
