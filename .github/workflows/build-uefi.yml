@@ -77,9 +77,6 @@ jobs:
       - name: Форсировать запуск всех драйверов (bring-up)
         run: python fw/patches/force_dispatch.py em
 
-      - name: Метки состояния BDS (цифры + текст)
-        run: python fw/patches/paint_bds.py em
-
       - name: CpuDxe — отключить SyncCacheConfig (виснет на нашей карте)
         run: python fw/patches/cpudxe_fix.py em
 
