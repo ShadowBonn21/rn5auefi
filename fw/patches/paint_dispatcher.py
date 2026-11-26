@@ -3,13 +3,16 @@
 r"""
 paint_dispatcher.py — счётчики диспетчера DXE цифрами (без UART).
 
-Раскладка цифр в верхней строке экрана (y=10, семисегментные, 36x72):
+Раскладка цифр в верхней строке экрана (y=10, семисегментные, 36x72, шаг 50):
 
-    x=10,  60   — запущено драйверов
-    x=110, 160  — обнаружено драйверов
-    x=460, 510  — номер последнего запускаемого драйвера (по списку обнаружения,
-                  то есть по порядку файлов в FV)  <-- главный ориентир
-    (x=210, 260/310, 360, 410, 560, 610 — другие модули)
+    10, 60        — запущено драйверов
+    110, 160      — обнаружено драйверов
+    210, 260      — индекс последнего ЗАПУЩЕННОГО драйвера
+    460, 510, 560 — индекс драйвера, который НЕ УДАЛОСЬ ЗАГРУЗИТЬ (если был)
+    620, 670      — сколько всего драйверов не загрузилось
+
+Индекс — позиция драйвера в списке обнаружения (порядок файлов в FV,
+среди файлов типа DXE_DRIVER/DRIVER; приложения и DXE-ядро не считаются).
 
 Идемпотентно.
 """
@@ -24,6 +27,8 @@ HELPER = r'''
 // Отладка без UART: цифры диспетчера DXE (fw/patches/paint_dispatcher.py)
 //
 STATIC UINTN  mUggDispatchCount = 0;
+STATIC UINTN  mUggLoadFailCount = 0;
+STATIC UINTN  mUggLoadFailIndex = 0;
 
 STATIC
 VOID
@@ -56,7 +61,6 @@ MsmPaintDigit (
   };
   UINTN  I;
 
-  /* стереть область под цифрой */
   for (Row = 0; Row < 100; Row++) {
     Ptr = Base + (Y + Row) * 2160 + X * 3;
     for (Col = 0; Col < 46; Col++) {
@@ -82,26 +86,35 @@ MsmPaintDigit (
 }
 
 STATIC
-VOID
-MsmPaintDriverNumber (
+UINTN
+MsmDriverIndex (
   IN EFI_CORE_DRIVER_ENTRY  *DriverEntry
   )
 {
   LIST_ENTRY  *Link;
   UINTN        Index = 0;
-  UINTN        N = ++mUggDispatchCount;
 
-  /* сколько запущено */
-  MsmPaintDigit (10, 10, (N / 10) % 10);
-  MsmPaintDigit (60, 10, N % 10);
-
-  /* порядковый номер этого драйвера в списке обнаружения */
   for (Link = mDiscoveredList.ForwardLink; Link != &mDiscoveredList; Link = Link->ForwardLink) {
     Index++;
     if (Link == &DriverEntry->Link) {
       break;
     }
   }
+  return Index;
+}
+
+STATIC
+VOID
+MsmPaintDriverNumber (
+  IN EFI_CORE_DRIVER_ENTRY  *DriverEntry
+  )
+{
+  UINTN  N = ++mUggDispatchCount;
+  UINTN  Index = MsmDriverIndex (DriverEntry);
+
+  MsmPaintDigit (10, 10, (N / 10) % 10);
+  MsmPaintDigit (60, 10, N % 10);
+
   MsmPaintDigit (210, 10, (Index / 10) % 10);
   MsmPaintDigit (260, 10, Index % 10);
 }
@@ -123,10 +136,30 @@ MsmPaintDiscoveredCount (
   MsmPaintDigit (160, 10, Count % 10);
 }
 
+STATIC
+VOID
+MsmPaintLoadFailure (
+  IN EFI_CORE_DRIVER_ENTRY  *DriverEntry
+  )
+{
+  mUggLoadFailCount++;
+  mUggLoadFailIndex = MsmDriverIndex (DriverEntry);
+
+  MsmPaintDigit (460, 10, (mUggLoadFailIndex / 100) % 10);
+  MsmPaintDigit (510, 10, (mUggLoadFailIndex / 10) % 10);
+  MsmPaintDigit (560, 10, mUggLoadFailIndex % 10);
+
+  MsmPaintDigit (620, 10, (mUggLoadFailCount / 10) % 10);
+  MsmPaintDigit (670, 10, mUggLoadFailCount % 10);
+}
+
 '''
 
 ANCHOR_START = "        Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);"
 ANCHOR_END = "  CoreCloseEvent (DxeDispatchEvent);"
+ANCHOR_FAIL = ("          // If it's an error don't try the StartImage\n"
+               "          //\n"
+               "          continue;")
 
 
 def main():
@@ -143,10 +176,10 @@ def main():
         print("paint_dispatcher: уже пропатчено")
         return 0
 
-    if ANCHOR_START not in src:
-        sys.exit("paint_dispatcher: не найден вызов CoreStartImage")
-    if ANCHOR_END not in src:
-        sys.exit("paint_dispatcher: не найден CoreCloseEvent в конце CoreDispatcher")
+    for a, what in ((ANCHOR_START, "CoreStartImage"), (ANCHOR_END, "CoreCloseEvent"),
+                    (ANCHOR_FAIL, "ветку ошибки загрузки")):
+        if a not in src:
+            sys.exit("paint_dispatcher: не найдено: %s" % what)
 
     anchor_fn = "EFI_STATUS\nEFIAPI\nCoreDispatcher ("
     idx = src.find(anchor_fn)
@@ -156,10 +189,15 @@ def main():
 
     src = src.replace(ANCHOR_START, "        MsmPaintDriverNumber (DriverEntry);\n" + ANCHOR_START, 1)
     src = src.replace(ANCHOR_END, "  MsmPaintDiscoveredCount ();\n" + ANCHOR_END, 1)
+    src = src.replace(
+        ANCHOR_FAIL,
+        "          MsmPaintLoadFailure (DriverEntry);\n          continue;",
+        1,
+    )
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_dispatcher: добавлены цифры (запущено / обнаружено / номер драйвера)")
+    print("paint_dispatcher: цифры (запущено/обнаружено/индекс/сбой загрузки)")
     return 0
 
 
