@@ -1,86 +1,85 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-paint_cpudxe.py — метки внутри CpuDxeInitialize.
+paint_cpudxe.py — шаг инициализации CpuDxe как ЦИФРА на экране.
 
-ВАЖНО: сборка использует ЗАКРЕПЛЁННУЮ версию edk2 из сабмодуля edk2-msm,
-а не master. В ней функция выглядит так (ArmPkg/Drivers/CpuDxe/CpuDxe.c):
+Никаких полосок: в верхней строке (y=10, x=300) рисуется одна семисегментная
+цифра — номер шага CpuDxeInitialize. Так и человеку, и мне видно однозначно.
 
-    InitializeExceptions (&mCpu);
-    InitializeDma (&mCpu);
-    Status = gBS->InstallMultipleProtocolInterfaces (   <-- CPU arch protocol
-                 &mCpuHandle, &gEfiCpuArchProtocolGuid, &mCpu, NULL);
-    mIsFlushingGCD = TRUE;
-    SyncCacheConfig (&mCpu);                            <-- перестройка атрибутов
-    mIsFlushingGCD = FALSE;
-    Status = gBS->CreateEventEx (...);
-    return Status;
-
-Метки: полоса-шаг (по 8 строк, шаг 12 строк, начиная со строки 900 экрана).
-
+Шаги:
     1 — перед InitializeExceptions
     2 — после InitializeExceptions
     3 — после InitializeDma
-    4 — перед InstallMultipleProtocolInterfaces
-    5 — после установки (перед mIsFlushingGCD = TRUE)
-    6 — после SyncCacheConfig
+    4 — перед InstallMultipleProtocolInterfaces (CPU arch protocol)
+    5 — после установки протокола
+    6 — после SyncCacheConfig (в текущей сборке отключён)
     7 — перед CreateEventEx
     8 — перед return
 
-Плюс диагностика без экрана: перед return вызывается холодная перезагрузка.
-Если телефон перезагрузился — значит весь CpuDxe отработал (и «зависание»
-на экране было замороженным кадром); если нет — код стоит на месте.
+ВАЖНО: файл берётся из ЗАКРЕПЛЁННОЙ версии edk2 (сабмодуль edk2-msm),
+там другая сигнатура и нет блока RemapUnusedMemoryNx — якоря проверены
+скриптом tools/audit_patches.py.
 """
 
 import os
 import sys
 
-MARK = "MsmPaintCpuDxeStep"
+MARK = "MsmPaintStepDigit"
 
 HELPER = r'''
 //
-// Отладка без UART: шаг CpuDxeInitialize (fw/patches/paint_cpudxe.py)
+// Отладка без UART: цифра шага в верхней строке (fw/patches/paint_cpudxe.py)
 //
 STATIC
 VOID
-MsmPaintCpuDxeStep (
-  IN UINTN  Step
+MsmPaintStepDigits (
+  IN UINTN  X,
+  IN UINTN  Digit
   )
 {
+  STATIC CONST UINT8  Seg[10] = {
+    0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
+  };
   UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  K;
-  UINTN  Y;
-  UINTN  X;
-  UINT8  *Row;
+  UINTN  W = 36;
+  UINTN  H = 72;
+  UINTN  T = 7;
+  UINTN  Y0 = 10;
+  UINTN  S = Seg[Digit % 10];
+  UINTN  Row;
+  UINTN  Col;
+  UINT8  *Ptr;
+  CONST UINTN  Rect[7][4] = {
+    { 0, 0, W, T },
+    { W - T, 0, T, H / 2 },
+    { W - T, H / 2, T, H / 2 },
+    { 0, H - T, W, T },
+    { 0, H / 2, T, H / 2 },
+    { 0, 0, T, H / 2 },
+    { 0, H / 2 - T / 2, W, T }
+  };
+  UINTN  I;
 
-  /* полоски по 8 строк, шаг 12 строк: шаг k -> 900+(k-1)*12 .. +8 */
-  for (K = 1; K <= Step && K <= 8; K++) {
-    for (Y = 900 + (K - 1) * 12; Y < 900 + (K - 1) * 12 + 8; Y++) {
-      Row = Base + Y * 2160;
-      for (X = 0; X < 2160; X++) {
-        Row[X] = 0xFF;
-      }
+  /* стереть цифру (область 46x100) */
+  for (Row = 0; Row < 100; Row++) {
+    Ptr = Base + (Y0 + Row) * 2160 + X * 3;
+    for (Col = 0; Col < 46; Col++) {
+      Ptr[Col * 3 + 0] = 0x00;
+      Ptr[Col * 3 + 1] = 0x00;
+      Ptr[Col * 3 + 2] = 0x00;
     }
   }
 
-  /* «разрушающие» метки: шаг >= 4 стирает штрихкод, шаг >= 5 — число */
-  if (Step >= 4) {
-    for (Y = 196; Y < 844; Y++) {
-      Row = Base + Y * 2160;
-      for (X = 36; X < 368; X++) {
-        Row[X * 3 + 0] = 0x00;
-        Row[X * 3 + 1] = 0x00;
-        Row[X * 3 + 2] = 0x00;
-      }
+  for (I = 0; I < 7; I++) {
+    if ((S & (1u << I)) == 0) {
+      continue;
     }
-  }
-  if (Step >= 5) {
-    for (Y = 0; Y < 100; Y++) {
-      Row = Base + Y * 2160;
-      for (X = 0; X < 260; X++) {
-        Row[X * 3 + 0] = 0x00;
-        Row[X * 3 + 1] = 0x00;
-        Row[X * 3 + 2] = 0x00;
+    for (Row = 0; Row < Rect[I][3]; Row++) {
+      Ptr = Base + (Y0 + Rect[I][1] + Row) * 2160 + (X + Rect[I][0]) * 3;
+      for (Col = 0; Col < Rect[I][2]; Col++) {
+        Ptr[Col * 3 + 0] = 0xFF;
+        Ptr[Col * 3 + 1] = 0xFF;
+        Ptr[Col * 3 + 2] = 0xFF;
       }
     }
   }
@@ -95,7 +94,6 @@ HOOKS = [
     ("  InitializeDma (&mCpu);", 3, False),
     ("  Status = gBS->InstallMultipleProtocolInterfaces (", 4, True),
     ("  mIsFlushingGCD = TRUE;", 5, True),
-    ("  SyncCacheConfig (&mCpu);", 6, False),
     ("  Status = gBS->CreateEventEx (", 7, True),
     ("  return Status;", 8, True),
 ]
@@ -115,17 +113,15 @@ def main():
         print("paint_cpudxe: уже пропатчено")
         return 0
 
-    anchor = "CpuDxeInitialize (\n"
-    idx = src.find("EFI_STATUS\n" + anchor)
+    anchor_fn = "CpuDxeInitialize (\n"
+    idx = src.find("EFI_STATUS\n" + anchor_fn)
     if idx < 0:
         sys.exit("paint_cpudxe: не найдено определение CpuDxeInitialize")
     src = src[:idx] + HELPER + src[idx:]
 
     #
-    # ugg: SyncCacheConfig() обходит страничные таблицы и на нашей карте
-    # памяти уходит в бесконечный цикл (проверено метками: шаг 5 -> тишина).
-    # На время bring-up не синхронизируем GCD с MMU: защиты памяти всё равно
-    # отключены PCD'ами, так что атрибуты GCD не влияют на работу драйверов.
+    # SyncCacheConfig на нашей карте памяти уходит в бесконечный цикл
+    # (обход страничных таблиц). На время bring-up не вызываем.
     #
     src = src.replace(
         "  SyncCacheConfig (&mCpu);",
@@ -138,7 +134,7 @@ def main():
         if anchor not in src:
             print("  !! не найден якорь для шага %d: %s" % (step, anchor.strip()[:50]))
             continue
-        call = "  MsmPaintCpuDxeStep (%d);" % step
+        call = "  MsmPaintStepDigits (300, %d);" % step
         repl = (call + "\n" + anchor) if before else (anchor + "\n" + call)
         src = src.replace(anchor, repl, 1)
         n += 1
@@ -148,7 +144,7 @@ def main():
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
-    print("paint_cpudxe: точек %d" % n)
+    print("paint_cpudxe: цифровых меток %d" % n)
     return 0
 
 

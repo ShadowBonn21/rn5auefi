@@ -45,6 +45,7 @@ READ_LOCK_STATUS   = TRUE
   # иначе ConPlatform/ConSplitter/BDS обращаются к отсутствующим сервисам
   # и загрузка встаёт (проверено счётчиком: остановка на 12-м драйвере).
 # INF MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf   # ВРЕМЕННО: тест без переменных
+  INF MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf
   INF MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
 
   INF MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf
