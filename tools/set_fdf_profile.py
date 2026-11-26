@@ -72,6 +72,9 @@ GROUPS = {
     "logo": [
         "Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf",
     ],
+    "shellonly": [
+        "ShellPkg/Application/Shell/Shell.inf",
+    ],
     "shell": [
         "ShellPkg/Application/Shell/Shell.inf",
         "MdeModulePkg/Application/UiApp/UiApp.inf",
