@@ -80,24 +80,6 @@ MsmPaintBdsDigit (
   }
 }
 
-STATIC
-VOID
-MsmPaintBdsBar (
-  IN UINTN  Row0
-  )
-{
-  UINT8  *Base = (UINT8 *)(UINTN)(0x90000000ULL - 256ULL);
-  UINTN  Y;
-  UINTN  X;
-  UINT8  *Row;
-
-  for (Y = Row0; Y < Row0 + 24; Y++) {
-    Row = Base + Y * 2160;
-    for (X = 0; X < 2160; X++) {
-      Row[X] = 0xFF;
-    }
-  }
-}
 
 '''
 
