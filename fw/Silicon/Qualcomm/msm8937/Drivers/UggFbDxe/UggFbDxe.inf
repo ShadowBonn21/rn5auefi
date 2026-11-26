@@ -13,6 +13,7 @@
 
 [Sources]
   UggFbDxe.c
+  UggFont.c
 
 [Packages]
   MdePkg/MdePkg.dec

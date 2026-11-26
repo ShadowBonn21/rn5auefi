@@ -298,6 +298,67 @@ UggFbRedrawCallback (
   FbFillRect (20, 20, 40, 40, &White);
 }
 
+/* Шрифт 8x12 (файл UggFont.c, генерируется tools/gen_font.py). */
+extern CONST UINT8  mUggFontData[95][12];
+extern CONST UINTN  mUggFontFirst;
+extern CONST UINTN  mUggFontCount;
+
+/*
+  Собственный вывод текста: рисуем символы прямо в framebuffer, не полагаясь
+  на консольный стек UEFI (ConSplitter/GraphicsConsole). Нужно потому, что
+  gST->ConOut на этом устройстве возвращает успех, но ничего не рисует.
+*/
+STATIC
+VOID
+UggDrawChar (
+  IN UINTN  X,
+  IN UINTN  Y,
+  IN UINT8  Ch
+  )
+{
+  UINTN  Index;
+  UINTN  Row;
+  UINTN  Col;
+  UINT8  Bits;
+
+  if ((Ch < mUggFontFirst) || (Ch >= mUggFontFirst + mUggFontCount)) {
+    Ch = '?';
+  }
+  if ((Ch < mUggFontFirst) || (Ch >= mUggFontFirst + mUggFontCount)) {
+    return;
+  }
+
+  Index = Ch - mUggFontFirst;
+  for (Row = 0; Row < 12; Row++) {
+    Bits = mUggFontData[Index][Row];
+    for (Col = 0; Col < 8; Col++) {
+      EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Pixel;
+      Pixel.Blue  = (Bits & (0x80 >> Col)) ? 0xFF : 0x00;
+      Pixel.Green = Pixel.Blue;
+      Pixel.Red   = Pixel.Blue;
+      Pixel.Reserved = 0;
+      FbPutPixel (X + Col, Y + Row, &Pixel);
+    }
+  }
+}
+
+STATIC
+VOID
+UggDrawText (
+  IN UINTN        X,
+  IN UINTN        Y,
+  IN CONST CHAR8  *Text
+  )
+{
+  UINTN  Pos = 0;
+
+  while ((*Text != 0) && (Pos < 80)) {
+    UggDrawChar (X + Pos * 8, Y, (UINT8)*Text);
+    Text++;
+    Pos++;
+  }
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -439,6 +500,16 @@ UggFbDxeInitialize (
       gST->ConOut->OutputString (gST->ConOut, L"UGG-FB-CONSOLE-OK\r\n");
       gST->ConOut->OutputString (gST->ConOut, L"second line\r\n");
     }
+
+    /*
+      Собственный вывод текста — не зависит от консольного стека.
+      Если эти строки видны, значит у нас есть рабочий вывод на экран,
+      и дальше можно строить меню/диагностику сами, без GraphicsConsole.
+    */
+    UggDrawText (24, 120, "UGG UEFI framebuffer");
+    UggDrawText (24, 140, "own text output: OK");
+    UggDrawText (24, 160, "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    UggDrawText (24, 180, "abcdefghijklmnopqrstuvwxyz .,:;!?-_/\\()[]{}");
   }
 
   ASSERT_EFI_ERROR (Status);
