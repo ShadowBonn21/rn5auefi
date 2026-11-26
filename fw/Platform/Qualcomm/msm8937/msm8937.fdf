@@ -49,20 +49,20 @@ READ_LOCK_STATUS   = TRUE
 
   INF MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf
 
-  INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf
-  INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf
-  INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf
+  # INF MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf   # профиль min
+  # INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf   # профиль min
+  # INF MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf   # профиль min
   INF EmbeddedPkg/RealTimeClockRuntimeDxe/RealTimeClockRuntimeDxe.inf
-  INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
-  INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf
-  INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf
+  # INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf   # профиль min
+  # INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf   # профиль min
 
   # Консоль: framebuffer (наследуется от LK) + опционально UART
-# INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
-INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
-INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
+  # INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf   # профиль min
+  INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
+  INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
   INF MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
-# INF MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf   # нет UART: консоль только графическая (PcdDebugStageBands=0)
+  # INF MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf   # профиль min
 
   INF ArmPkg/Drivers/ArmGic/ArmGicDxe.inf
   INF ArmPkg/Drivers/TimerDxe/TimerDxe.inf
@@ -77,32 +77,32 @@ INF MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
 
   # ── Диски: нужен драйвер SDCC (eMMC) — СЕЙЧАС ОТСУТСТВУЕТ ──────────────
   # Без него UEFI не увидит ни одного раздела. См. docs/02-bringup-plan.md, G3.
-INF MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf
-INF MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf
-INF FatPkg/EnhancedFatDxe/Fat.inf
-INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
+  # INF MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf   # профиль min
+  # INF FatPkg/EnhancedFatDxe/Fat.inf   # профиль min
+  # INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf   # профиль min
 
   # ── USB host ───────────────────────────────────────────────────────────
-  INF MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBusDxe.inf
-  INF MdeModulePkg/Bus/Usb/UsbMassStorageDxe/UsbMassStorageDxe.inf
-  INF MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf
+  # INF MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBusDxe.inf   # профиль min
+  # INF MdeModulePkg/Bus/Usb/UsbMassStorageDxe/UsbMassStorageDxe.inf   # профиль min
+  # INF MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf   # профиль min
 
   # ── FDT / SMBIOS / BDS ─────────────────────────────────────────────────
-  INF EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf
-  INF Platform/RenegadePkg/Drivers/PlatformSmbiosDxe/PlatformSmbiosDxe.inf
-  INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
-  INF MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf
-  INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
-  INF MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf
-  INF MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf
-  INF MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf
-INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
-INF MdeModulePkg/Application/UiApp/UiApp.inf
-INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf
+  # INF EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf   # профиль min
+  # INF Platform/RenegadePkg/Drivers/PlatformSmbiosDxe/PlatformSmbiosDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf   # профиль min
+  # INF MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf   # профиль min
+  INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
+  # INF MdeModulePkg/Application/UiApp/UiApp.inf   # профиль min
+  # INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf   # профиль min
 
   # UEFI Shell + SimpleInit (GUI-загрузчик, как на остальных устройствах Renegade)
-INF ShellPkg/Application/Shell/Shell.inf
-INF src/main/SimpleInitMain.inf
+  # INF ShellPkg/Application/Shell/Shell.inf   # профиль min
+  # INF src/main/SimpleInitMain.inf   # профиль min
 
 
 # Device specific fdf
