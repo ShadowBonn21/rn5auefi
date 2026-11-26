@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-set_fdf_profile.py — переключать состав компонентов FDF между профилями.
+set_fdf_profile.py — состав компонентов FDF по профилям и группам.
 
-Профили:
-    min   — то, что проверено на устройстве: ядро, память/переменные,
-            консоль, GIC/таймер, наш драйвер дисплея, BdsDxe.
-            В этом наборе консоль UEFI работает и BDS печатает текст.
-    full  — весь набор (диск, USB, логотип, Shell, SimpleInit, HII/UI, SMBIOS).
+Профиль min — проверенный на устройстве набор: ядро, память/переменные,
+консоль, GIC/таймер, наш драйвер дисплея, BdsDxe. В нём консоль UEFI работает
+и BDS печатает текст.
 
-Зачем: при полном наборе BdsDxe перестаёт запускаться, и мы теряем консоль.
-Скрипт позволяет добавлять драйверы по одному и сразу видеть результат.
+Группы добавляются к min по одной, чтобы сразу видеть, после какой группы
+BdsDxe перестаёт запускаться (тогда на экране остаётся только наша строка).
 
 Запуск:
     python tools/set_fdf_profile.py min
+    python tools/set_fdf_profile.py min disk
+    python tools/set_fdf_profile.py min disk apps
     python tools/set_fdf_profile.py full
 """
 
@@ -45,13 +45,72 @@ MIN_KEEP = [
     "Silicon/Qualcomm/QcomPkg/PrePi/PrePi.inf",
 ]
 
+GROUPS = {
+    "disk": [
+        "MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf",
+        "MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf",
+        "FatPkg/EnhancedFatDxe/Fat.inf",
+        "MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf",
+    ],
+    "smbios": [
+        "EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf",
+        "Platform/RenegadePkg/Drivers/PlatformSmbiosDxe/PlatformSmbiosDxe.inf",
+        "MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf",
+    ],
+    "hii": [
+        "MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf",
+        "MdeModulePkg/Universal/PrintDxe/PrintDxe.inf",
+        "MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf",
+        "MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf",
+        "MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf",
+    ],
+    "usb": [
+        "MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBusDxe.inf",
+        "MdeModulePkg/Bus/Usb/UsbMassStorageDxe/UsbMassStorageDxe.inf",
+        "MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf",
+    ],
+    "apps": [
+        "Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf",
+        "ShellPkg/Application/Shell/Shell.inf",
+        "src/main/SimpleInitMain.inf",
+        "MdeModulePkg/Application/UiApp/UiApp.inf",
+    ],
+    "services": [
+        "MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf",
+        "EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf",
+        "MdeModulePkg/Universal/ResetSystemRuntimeDxe/ResetSystemRuntimeDxe.inf",
+        "EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf",
+        "MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf",
+        "MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf",
+    ],
+}
+
 INF_RE = re.compile(r'^(\s*)(#\s*)?INF\s+(\S+)(\s*#.*)?$')
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("min", "full"):
-        sys.exit("usage: set_fdf_profile.py min|full")
-    profile = sys.argv[1]
+    if len(sys.argv) < 2:
+        sys.exit("usage: set_fdf_profile.py [min|full] [%s]" % "|".join(GROUPS))
+
+    profile = "min"
+    wanted = set()
+    for a in sys.argv[1:]:
+        if a in ("min", "full"):
+            profile = a
+        elif a in GROUPS:
+            wanted.add(a)
+        else:
+            sys.exit("неизвестный аргумент: %s (группы: %s)" % (a, ", ".join(GROUPS)))
+
+    keep = set()
+    if profile == "full":
+        for g in GROUPS.values():
+            keep.update(g)
+        keep.update(MIN_KEEP)
+    else:
+        keep.update(MIN_KEEP)
+        for g in wanted:
+            keep.update(GROUPS[g])
 
     if not os.path.isfile(FDF):
         sys.exit("нет файла: %s" % FDF)
@@ -66,16 +125,16 @@ def main():
             out.append(l)
             continue
         inf = m.group(3)
-        keep = (profile == "full") or (inf in MIN_KEEP)
-        if keep:
+        if inf in keep:
             out.append("  INF %s" % inf)
             enabled += 1
         else:
-            out.append("  # INF %s   # профиль min" % inf)
+            out.append("  # INF %s   # выключено профилем" % inf)
             disabled += 1
 
     io.open(FDF, "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n")
-    print("профиль %s: включено %d, выключено %d" % (profile, enabled, disabled))
+    print("профиль %s%s: включено %d, выключено %d"
+          % (profile, ("+" + ",".join(sorted(wanted))) if wanted else "", enabled, disabled))
     return 0
 
 
