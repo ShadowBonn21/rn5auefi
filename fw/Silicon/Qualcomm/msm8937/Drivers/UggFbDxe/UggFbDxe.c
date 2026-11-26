@@ -549,6 +549,46 @@ STATIC EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  mUggTextOut = {
   &mUggTextMode
 };
 
+/*
+  Проба кнопки VOL+ (TLMM GPIO 91, active low).
+
+  Из device tree: soc/gpio_keys/vol_up -> gpios = <&tlmm 91 GPIO_ACTIVE_LOW>,
+  linux,code = 115 (KEY_VOLUMEUP). Читаем уровень пина из TLMM и показываем
+  цифрой на экране: 1 = нажата, 0 = отпущена. Так проверяем адрес регистра
+  и полярность, прежде чем делать настоящий драйвер ввода.
+*/
+#define UGG_TLMM_BASE   0x01000000
+#define UGG_VOLUP_GPIO  91
+
+STATIC
+UINTN
+UggVolUpPressed (
+  VOID
+  )
+{
+  /* TLMM: GPIO_CFG(n) по смещению 0x1000*(n+1), GPIO_IN_OUT = +0x4, бит 0 — уровень */
+  volatile UINT32  *Reg = (volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
+  UINT32           Level = Reg[1] & 0x1;
+
+  /* active low: нажата, когда уровень 0 */
+  return (Level == 0) ? 1 : 0;
+}
+
+STATIC
+VOID
+EFIAPI
+UggKeyPollCallback (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  UINTN                          Pressed = UggVolUpPressed ();
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+
+  FbFillRect (660, 200, 60, 100, &Black);
+  UggDrawChar (660, 200, Pressed ? '1' : '0');
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -716,16 +756,16 @@ UggFbDxeInitialize (
   /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
   UggDrawText (16, 4, "Ugg UEFI  MSM8940  Redmi Note 5A Prime");
 
-  if (FixedPcdGet32 (PcdDebugStageBands) == 2) {
+  if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
     Status = gBS->CreateEvent (
                     EVT_TIMER | EVT_NOTIFY_SIGNAL,
                     TPL_CALLBACK,
-                    UggFbRedrawCallback,
+                    ((FixedPcdGet32 (PcdDebugStageBands) == 5) ? UggKeyPollCallback : (EFI_EVENT_NOTIFY)UggFbRedrawCallback),
                     NULL,
                     &mRedrawTimer
                     );
     if (!EFI_ERROR (Status)) {
-      gBS->SetTimer (mRedrawTimer, TimerPeriodic, 500000);   /* 0.5 c */
+      gBS->SetTimer (mRedrawTimer, TimerPeriodic, 200000);   /* 0.5 c */
     }
   }
 

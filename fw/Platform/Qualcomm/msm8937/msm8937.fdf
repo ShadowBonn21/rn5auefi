@@ -101,7 +101,7 @@ READ_LOCK_STATUS   = TRUE
   # INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf   # выключено профилем
 
   # UEFI Shell + SimpleInit (GUI-загрузчик, как на остальных устройствах Renegade)
-  INF ShellPkg/Application/Shell/Shell.inf
+  # INF ShellPkg/Application/Shell/Shell.inf   # выключено профилем
   # INF src/main/SimpleInitMain.inf   # выключено профилем
 
 
