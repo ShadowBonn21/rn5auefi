@@ -687,7 +687,6 @@ UggFbDxeInitialize (
       печатаем строку через gST->ConOut. Если строка видна — консоль
       работает, и дальше можно строить свой минимальный UI, не завися от BDS.
     */
-    gBS->ConnectController (Handle, NULL, NULL, TRUE);
     if (gST->ConOut != NULL) {
       gST->ConOut->OutputString (gST->ConOut, L"UGG-FB-CONSOLE-OK\r\n");
       gST->ConOut->OutputString (gST->ConOut, L"second line\r\n");
@@ -705,6 +704,17 @@ UggFbDxeInitialize (
   }
 
   ASSERT_EFI_ERROR (Status);
+
+  /*
+    Подключаем контроллер к нашему хэндлу. Именно это заставляет
+    ConPlatform/ConSplitter подхватить наш SimpleTextOut: без этого
+    gST->ConOut остаётся пустой консолью, OutputString возвращает успех,
+    а на экране ничего не появляется.
+  */
+  gBS->ConnectController (Handle, NULL, NULL, TRUE);
+
+  /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
+  UggDrawText (16, 4, "Ugg UEFI  MSM8940  Redmi Note 5A Prime");
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 2) {
     Status = gBS->CreateEvent (
