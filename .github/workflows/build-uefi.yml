@@ -77,9 +77,6 @@ jobs:
       - name: Форсировать запуск всех драйверов (bring-up)
         run: python fw/patches/force_dispatch.py em
 
-      - name: Цифры диспетчера DXE
-        run: python fw/patches/paint_dispatcher.py em
-
       - name: Метки состояния BDS (цифры + текст)
         run: python fw/patches/paint_bds.py em
 

@@ -87,16 +87,16 @@ MsmPaintBdsStep (
   IN UINTN  Step
   )
 {
-  MsmPaintBdsDigit (260, (Step / 10) % 10);
-  MsmPaintBdsDigit (310, Step % 10);
+  /* шаг не рисуем: экран занят маркерами */
+  (VOID)Step;
 }
 
 '''
 
 HOOKS = [
     # цифровые маркеры (видны всегда)
-    ("  EFI_HANDLE  Handle;", "  MsmPaintBdsDigit (360, 1);\n", True),
-    ("  Status = gBS->InstallMultipleProtocolInterfaces (", "  MsmPaintBdsDigit (410, 1);\n", True),
+    ("  EFI_HANDLE  Handle;", "  MsmPaintBdsDigit (660, 1);\n", True),
+    ("  HotkeyTriggered = NULL;", "  MsmPaintBdsDigit (680, 1);\n", True),
     ("  HotkeyTriggered = NULL;", "  MsmPaintBdsStep (0);\n", True),
     ('  DEBUG ((DEBUG_INFO, "[Bds] Entry...\\n"));', "  MsmPaintBdsStep (1);\n", False),
     ("  Status = gBS->LocateProtocol (&gEdkiiVariablePolicyProtocolGuid, NULL, (VOID **)&VariablePolicy);", "  MsmPaintBdsStep (2);\n", True),
