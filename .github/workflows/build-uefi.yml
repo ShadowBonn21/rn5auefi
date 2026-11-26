@@ -74,6 +74,9 @@ jobs:
       - name: Убрать последовательную консоль из ConOut
         run: python fw/patches/no_serial_console.py em
 
+      - name: Форсировать запуск всех драйверов (bring-up)
+        run: python fw/patches/force_dispatch.py em
+
       - name: Цифры диспетчера DXE
         run: python fw/patches/paint_dispatcher.py em
 
