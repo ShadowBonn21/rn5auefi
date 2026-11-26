@@ -74,17 +74,11 @@ jobs:
       - name: Убрать последовательную консоль из ConOut
         run: python fw/patches/no_serial_console.py em
 
-      - name: Метки внутри BDS
-        run: python fw/patches/paint_bds.py em
-
-      - name: Метка передачи управления BDS
-        run: python fw/patches/paint_dxemain.py em
+      - name: CpuDxe — отключить SyncCacheConfig (виснет на нашей карте)
+        run: python fw/patches/cpudxe_fix.py em
 
       - name: Счётчик запускаемых драйверов
         run: python fw/patches/paint_dispatcher.py em
-
-      - name: Метки внутри CpuDxe
-        run: python fw/patches/paint_cpudxe.py em
 
       - name: Сборка UEFI
         run: |

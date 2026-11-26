@@ -40,13 +40,10 @@ MSM_FILES = [
 # (скрипт, файл, который он должен изменить)
 PATCHES = [
     ("minimal_prepi_entry.py", "Silicon/Qualcomm/QcomPkg/PrePi/ModuleEntryPoint.S"),
-    ("quiet_debug.py", "Silicon/Qualcomm/QcomPkg/QcomCommonDsc.inc"),
     ("null_serial.py", "Silicon/Qualcomm/QcomPkg/QcomCommonDsc.inc"),
     ("no_serial_console.py", "Platform/RenegadePkg/Library/PlatformBootManagerLib/PlatformBm.c"),
-    ("paint_bds.py", "Common/edk2/MdeModulePkg/Universal/BdsDxe/BdsEntry.c"),
-    ("paint_dxemain.py", "Common/edk2/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c"),
     ("paint_dispatcher.py", "Common/edk2/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c"),
-    ("paint_cpudxe.py", "Common/edk2/ArmPkg/Drivers/CpuDxe/CpuDxe.c"),
+    ("cpudxe_fix.py", "Common/edk2/ArmPkg/Drivers/CpuDxe/CpuDxe.c"),
 ]
 
 ROOT = "build/_audit"

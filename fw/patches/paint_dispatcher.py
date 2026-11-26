@@ -102,8 +102,8 @@ MsmPaintDriverNumber (
       break;
     }
   }
-  MsmPaintDigit (460, 10, (Index / 10) % 10);
-  MsmPaintDigit (510, 10, Index % 10);
+  MsmPaintDigit (210, 10, (Index / 10) % 10);
+  MsmPaintDigit (260, 10, Index % 10);
 }
 
 STATIC
