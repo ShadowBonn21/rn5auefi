@@ -99,7 +99,7 @@ READ_LOCK_STATUS   = TRUE
   INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
   # INF MdeModulePkg/Application/UiApp/UiApp.inf   # выключено профилем
   # INF Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf   # выключено профилем
-  INF Platform/Xiaomi/msm8937/Apps/UggTestApp/UggTestApp.inf
+  # INF Platform/Xiaomi/msm8937/Apps/UggTestApp/UggTestApp.inf   # выключено профилем
 
   # UEFI Shell + SimpleInit (GUI-загрузчик, как на остальных устройствах Renegade)
   # INF ShellPkg/Application/Shell/Shell.inf   # выключено профилем
