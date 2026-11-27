@@ -2221,6 +2221,7 @@ UggKeysPoll (
       UggDrawMenu ();
     }
 }
+}
 
 STATIC
 VOID
