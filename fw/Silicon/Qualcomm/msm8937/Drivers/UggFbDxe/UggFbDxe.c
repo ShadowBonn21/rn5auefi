@@ -1902,6 +1902,84 @@ UggSpmiAddrProbe (
   UggDrawText (16, Y, "v2 chan 0x73 cmd:");
   UggHex (152, Y, UggSpmiRd (UGG_SPMI_CHNLS + 0x8000 * 0x73 + 0x00));
 }
+/*
+  Чтение уровней TLMM для узкого диапазона пинов (80..100) — БЕЗ записей
+  в CFG (запись ранее роняла систему). Нужно найти реальный пин кнопки VOL+:
+  в device tree указан GPIO 91, но он не реагирует.
+
+  На экран выводится:
+    - по одному значению на пин: 0/1 (уровень входа);
+    - номер пина, который изменился последним;
+    - счётчик изменений.
+
+  Опрос идёт по таймеру (150 мс), поэтому нажатие видно почти сразу.
+*/
+#define UGG_SCAN_FIRST 80
+#define UGG_SCAN_LAST  100
+
+STATIC UINT8   mPinPrev[UGG_SCAN_LAST - UGG_SCAN_FIRST + 1];
+STATIC UINT8   mPinNow[UGG_SCAN_LAST - UGG_SCAN_FIRST + 1];
+STATIC BOOLEAN mPinInit = FALSE;
+STATIC UINTN   mPinChanged = 0xFFFF;
+STATIC UINTN   mPinChanges = 0;
+
+STATIC
+VOID
+UggPinScan (
+  VOID
+  )
+{
+  UINTN   Pin;
+  UINTN   Idx;
+  UINT32  Cfg;
+  UINT32  Level;
+  UINT8   Digits[UGG_SCAN_LAST - UGG_SCAN_FIRST + 1];
+
+  for (Pin = UGG_SCAN_FIRST; Pin <= UGG_SCAN_LAST; Pin++) {
+    Cfg   = *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pin + 1));
+    Level = *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pin + 1) + 4) & 1;
+    Idx = Pin - UGG_SCAN_FIRST;
+    Digits[Idx] = (UINT8)Level;
+    if (mPinInit && (Level != mPinPrev[Idx])) {
+      mPinChanged = Pin;
+      mPinChanges++;
+    }
+    mPinPrev[Idx] = (UINT8)Level;
+    (VOID)Cfg;
+  }
+  mPinInit = TRUE;
+
+  /* уровни: 21 значение, по 3 символа */
+  for (Idx = 0; Idx <= (UINTN)(UGG_SCAN_LAST - UGG_SCAN_FIRST); Idx++) {
+    UggDrawChar (16 + Idx * 28, 300, (CHAR8)('0' + Digits[Idx]));
+    UggDrawChar (16 + Idx * 28, 330, (CHAR8)('0' + ((UGG_SCAN_FIRST + Idx) / 10) % 10));
+    UggDrawChar (16 + Idx * 28, 350, (CHAR8)('0' + (UGG_SCAN_FIRST + Idx) % 10));
+  }
+
+  UggDrawText (16, 400, "changed pin:");
+  if (mPinChanged == 0xFFFF) {
+    UggDrawText (144, 400, "none");
+  } else {
+    UggDrawChar (144, 400, (CHAR8)('0' + (mPinChanged / 100) % 10));
+    UggDrawChar (164, 400, (CHAR8)('0' + (mPinChanged / 10) % 10));
+    UggDrawChar (184, 400, (CHAR8)('0' + mPinChanged % 10));
+  }
+  UggDrawText (16, 420, "changes:");
+  UggDrawChar (104, 420, (CHAR8)('0' + (mPinChanges / 100) % 10));
+  UggDrawChar (124, 420, (CHAR8)('0' + (mPinChanges / 10) % 10));
+  UggDrawChar (144, 420, (CHAR8)('0' + mPinChanges % 10));
+}
+
+STATIC
+VOID
+EFIAPI
+UggPinScanCallback (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  UggPinScan ();
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -2133,11 +2211,11 @@ UggFbDxeInitialize (
     UggSpmiAddrProbe ();
   }
 
-  if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
+  if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5) || (FixedPcdGet32 (PcdDebugStageBands) == 22)) {
     Status = gBS->CreateEvent (
                     EVT_TIMER | EVT_NOTIFY_SIGNAL,
                     TPL_CALLBACK,
-                    ((FixedPcdGet32 (PcdDebugStageBands) == 5) ? UggKeyPollCallback : (EFI_EVENT_NOTIFY)UggFbRedrawCallback),
+                    ((FixedPcdGet32 (PcdDebugStageBands) == 5) ? (EFI_EVENT_NOTIFY)UggKeyPollCallback : ((FixedPcdGet32 (PcdDebugStageBands) == 22) ? (EFI_EVENT_NOTIFY)UggPinScanCallback : (EFI_EVENT_NOTIFY)UggFbRedrawCallback)),
                     NULL,
                     &mRedrawTimer
                     );
