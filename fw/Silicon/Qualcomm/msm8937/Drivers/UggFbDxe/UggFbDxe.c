@@ -1122,6 +1122,83 @@ UggSdccInit3 (
   UggPrintHex (480, "err status:", UggHcRd (0x32));
 }
 
+/*
+  Питание eMMC по способу LK (легаси-режим MCI).
+
+  LK на msm8937 НЕ использует SDHCI-режим: он специально выключает его
+  (`MCI_HC_MODE` бит0 = 0) и работает через легаси-регистры MCI, а питание
+  включает записью в `MCI_POWER` (core_mem + 0x0):
+      MMC_BOOT_MCI_PWR_ON | MMC_BOOT_MCI_PWR_UP = 0x03
+
+  Мы наблюдали `PWRCTL_STATUS = BUS_OFF`, потому что питания не запрашивали
+  этим способом. Проба ниже включает питание и проверяет статус, затем
+  дополнительно пробует SDHCI-путь.
+*/
+#define UGG_MCI_POWER  0x000
+
+STATIC
+VOID
+UggSdccPowerProbe (
+  VOID
+  )
+{
+  UINTN   I;
+  UINT32  Reg;
+
+  UggPrintHex (300, "pwrctl before:", UggMciRd (UGG_PWRCTL_STATUS));
+
+  /* 1) легаси-режим: выключить SDHCI (как LK) */
+  Reg  = UggMciRd (UGG_MCI_HC_MODE);
+  Reg &= ~(1u << 0);
+  UggMciWr (UGG_MCI_HC_MODE, Reg);
+
+  /* 2) сброс контроллера битом CORE_SW_RST (MCI_POWER бит 7) */
+  *(volatile UINT8 *)(UINTN)(UGG_SDCC_CORE + UGG_MCI_POWER) = (UINT8)(1u << 7);
+
+  /* 3) питание: PWR_ON | PWR_UP = 0x03 */
+  *(volatile UINT8 *)(UINTN)(UGG_SDCC_CORE + UGG_MCI_POWER) = 0x03;
+
+  /* 4) ждём BUS_ON в статусе питания */
+  for (I = 0; I < 200000; I++) {
+    Reg = UggMciRd (UGG_PWRCTL_STATUS);
+    if ((Reg & 0x1) != 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 320, "legacy power:");
+  UggDrawText (128, 320, UggYesNo (I < 200000));
+  UggPrintHex (340, "pwrctl after:", UggMciRd (UGG_PWRCTL_STATUS));
+  UggPrintHex (360, "mci power:", *(volatile UINT8 *)(UINTN)(UGG_SDCC_CORE + UGG_MCI_POWER));
+
+  /* 5) теперь SDHCI: включить режим, клок, питание и попробовать CMD0 */
+  Reg  = UggMciRd (UGG_MCI_HC_MODE);
+  Reg |= (1u << 0) | (1u << 13);
+  UggMciWr (UGG_MCI_HC_MODE, Reg);
+  UggHcWr (0x10C, 0xA1C);
+
+  UggHcWr16 (0x2F, 0x1);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2F) & 0x1) == 0) {
+      break;
+    }
+  }
+  UggHcWr16 (0x2C, 0x0001);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2C) & 0x0002) != 0) {
+      break;
+    }
+  }
+  UggHcWr16 (0x2C, 0x0007);
+  UggHcWr16 (0x29, 0x0F);
+
+  UggHcWr (0x08, 0);
+  Reg = UggSdCmd (0x0000);
+  UggDrawText (16, 380, "CMD0 after power:");
+  UggDrawText (192, 380, UggYesNo (Reg != 0));
+  UggPrintHex (400, "int status:", UggHcRd (0x30));
+  UggPrintHex (420, "pwrctl final:", UggMciRd (UGG_PWRCTL_STATUS));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1307,6 +1384,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 10) {
     UggSdccInit3 ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 11) {
+    UggSdccPowerProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
