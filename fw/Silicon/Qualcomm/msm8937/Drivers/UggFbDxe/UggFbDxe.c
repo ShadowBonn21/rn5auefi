@@ -2242,11 +2242,11 @@ UggFbDxeInitialize (
     UggPinOnce ();
   }
 
-  if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5) || (FixedPcdGet32 (PcdDebugStageBands) == 22)) {
+  if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5) || (FixedPcdGet32 (PcdDebugStageBands) == 22) || (FixedPcdGet32 (PcdDebugStageBands) == 24)) {
     Status = gBS->CreateEvent (
                     EVT_TIMER | EVT_NOTIFY_SIGNAL,
                     TPL_CALLBACK,
-                    ((FixedPcdGet32 (PcdDebugStageBands) == 5) ? (EFI_EVENT_NOTIFY)UggKeyPollCallback : ((FixedPcdGet32 (PcdDebugStageBands) == 22) ? (EFI_EVENT_NOTIFY)UggPinScanCallback : (EFI_EVENT_NOTIFY)UggFbRedrawCallback)),
+                    ((FixedPcdGet32 (PcdDebugStageBands) == 5) ? (EFI_EVENT_NOTIFY)UggKeyPollCallback : ((FixedPcdGet32 (PcdDebugStageBands) == 22) ? (EFI_EVENT_NOTIFY)UggPinScanCallback : ((FixedPcdGet32 (PcdDebugStageBands) == 24) ? (EFI_EVENT_NOTIFY)UggSmallScanCallback : (EFI_EVENT_NOTIFY)UggFbRedrawCallback))),
                     NULL,
                     &mRedrawTimer
                     );
