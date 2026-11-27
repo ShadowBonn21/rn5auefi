@@ -2176,53 +2176,67 @@ UggKeysPoll (
   mKeyPrevValid = TRUE;
 
   /*
-    Логика:
-      фронт нажатия (уровень 0) -> СРАЗУ листаем меню
-      удержание > 1.2 с         -> выбор пункта (Enter), однократно
+    Логика кнопок:
 
-    Вся диагностика (изменившийся пин, счётчик нажатий) рисуется ТОЛЬКО при
-    изменении: постоянная перерисовка в некэшируемую видеопамять и была
-    причиной многосекундных задержек.
+      * листание срабатывает по ФРОНТУ нажатия (уровень стал 0) и НЕ зависит
+        от того, увидели ли мы отпускание — иначе один пропущенный опрос
+        блокировал листание навсегда (именно это и «вешало» меню);
+      * защита от дребезга: не чаще одного листания в 300 мс;
+      * удержание > 1.2 с (любой пин остаётся в 0) = выбор пункта (Enter).
+
+    Диагностика рисуется только при изменении — перерисовка в некэшируемую
+    видеопамять каждый опрос и была причиной тормозов.
   */
-  if (Changed) {
-    if (mKeyNowLevel == 0) {
-      if (!mKeyHoldActive) {
-        mKeyHoldActive = TRUE;
-        mKeyHoldFired  = FALSE;
-        mKeyHoldTicks  = 0;
-        mKeyHoldPin    = mKeyChangedPin;
+  {
+    BOOLEAN  AnyLow = FALSE;
+    UINTN    K;
 
-        mMenuIndex = (mMenuIndex + 1) % 3;
-        UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
-        UggDrawMenu ();
+    for (K = 0; K < UGG_KEY_COUNT; K++) {
+      if (mKeyPrev[K] == 0) {
+        AnyLow = TRUE;
+      }
+    }
+
+    if (mPollGap < 1000) {
+      mPollGap++;
+    }
+
+    if (Changed && (mKeyNowLevel == 0) && (mPollGap > 3)) {
+      mPollGap     = 0;
+      mHoldTicks   = 0;
+      mHoldFired   = FALSE;
+      mMenuIndex   = (mMenuIndex + 1) % 3;
+      UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
+      UggDrawMenu ();
+
+      UggDrawText (16, 420, "changed pin:");
+      UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
+      UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
+      UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
+      UggDrawText (16, 440, "presses:");
+      UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
+      UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
+      UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
+      UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
+    }
+
+    if (AnyLow) {
+      if (!mHoldFired) {
+        mHoldTicks++;
+        if (mHoldTicks > 12) {                   /* 12 * 100 мс = 1.2 с */
+          mHoldFired  = TRUE;
+          mMenuChosen = mMenuIndex;
+          UggKeyPush (0x17, 0x000D);             /* Enter */
+          UggDrawMenu ();
+        }
       }
     } else {
-      mKeyHoldActive = FALSE;
-      mKeyHoldTicks  = 0;
+      mHoldTicks = 0;
+      mHoldFired = FALSE;
     }
-
-    UggDrawText (16, 420, "changed pin:");
-    UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
-    UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
-    UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
-    UggDrawText (16, 440, "presses:");
-    UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
-    UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
-    UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
-    UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
   }
 
-  if (mKeyHoldActive && !mKeyHoldFired) {
-    mKeyHoldTicks++;
-    if (mKeyHoldTicks > 12) {                      /* 12 * 100 мс = 1.2 с */
-      mKeyHoldFired = TRUE;
-      mMenuChosen   = mMenuIndex;
-      UggKeyPush (0x17, 0x000D);                   /* Enter */
-      UggDrawMenu ();
-    }
 }
-}
-
 STATIC
 VOID
 EFIAPI
