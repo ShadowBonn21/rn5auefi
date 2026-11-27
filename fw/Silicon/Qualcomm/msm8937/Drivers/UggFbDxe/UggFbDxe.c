@@ -1620,6 +1620,62 @@ UggSpmiReadProbe (
     }
   }
 }
+/*
+  Безопасный этап: только поиск канала для PPID (чтение таблицы mapping,
+  никаких транзакций в каналы). Печатаем путь по дереву, чтобы проверить,
+  что разбор таблицы верный, и узнать номер канала для PMIC (ppid 0).
+*/
+STATIC
+VOID
+UggSpmiLookupProbe (
+  VOID
+  )
+{
+  UINT16   Ppid = 0;
+  UINTN    Index = 0;
+  UINTN    Step;
+  UINTN    Y = 300;
+  UINT32   Data;
+  UINTN    Bit;
+  BOOLEAN  Branch;
+  BOOLEAN  Done = FALSE;
+  UINT8    Apid = 0xFF;
+
+  UggDrawText (16, 280, "lookup ppid0, path:");
+
+  for (Step = 0; Step < 8 && !Done; Step++) {
+    Data = UggSpmiRd (UGG_SPMI_CNFG + 0x0B00 + Index * 4);
+    Bit  = (Data >> 18) & 0xF;
+
+    UggDrawText (16, Y, "idx:");
+    UggHex (56, Y, Index);
+    UggDrawText (120, Y, "data:");
+    UggHex (168, Y, Data);
+    Y += 20;
+
+    Branch = ((Ppid >> Bit) & 0x1) ? TRUE : FALSE;
+    if (Branch) {
+      if ((Data >> 8) & 0x1) {
+        Index = (Data >> 0) & 0xFF;
+      } else {
+        Apid  = (UINT8)((Data >> 0) & 0xFF);
+        Done  = TRUE;
+      }
+    } else {
+      if ((Data >> 17) & 0x1) {
+        Index = (Data >> 9) & 0xFF;
+      } else {
+        Apid  = (UINT8)((Data >> 9) & 0xFF);
+        Done  = TRUE;
+      }
+    }
+  }
+
+  UggDrawText (16, Y + 10, "apid:");
+  UggHex (64, Y + 10, Done ? Apid : 0xFFFFFFFF);
+  UggDrawText (16, Y + 30, "done:");
+  UggDrawText (64, Y + 30, UggYesNo (Done));
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1829,6 +1885,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 16) {
     UggSpmiReadProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 17) {
+    UggSpmiLookupProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
