@@ -2176,30 +2176,40 @@ UggKeysPoll (
   mKeyPrevValid = TRUE;
 
   /*
-    Логика кнопок:
+    Логика:
+      фронт нажатия (уровень 0) -> СРАЗУ листаем меню
+      удержание > 1.2 с         -> выбор пункта (Enter), однократно
 
-      нажатие (уровень 0)   -> отпускание даёт перевод по меню
-      удержание > 1.2 с     -> выбор пункта (Enter)
-
-    Период опроса 50 мс: удержание считается как 24 опроса.
-    Полярность активного уровня определяем по факту: считаем нажатием
-    переход в 0 (типично для этих плат), отпусканием — обратно в 1.
+    Вся диагностика (изменившийся пин, счётчик нажатий) рисуется ТОЛЬКО при
+    изменении: постоянная перерисовка в некэшируемую видеопамять и была
+    причиной многосекундных задержек.
   */
   if (Changed) {
     if (mKeyNowLevel == 0) {
-      mKeyHoldPin   = mKeyChangedPin;
-      mKeyHoldTicks = 0;
-      mKeyHoldActive = TRUE;
-      mKeyHoldFired  = FALSE;
-    } else {
-      if (mKeyHoldActive && !mKeyHoldFired) {
+      if (!mKeyHoldActive) {
+        mKeyHoldActive = TRUE;
+        mKeyHoldFired  = FALSE;
+        mKeyHoldTicks  = 0;
+        mKeyHoldPin    = mKeyChangedPin;
+
         mMenuIndex = (mMenuIndex + 1) % 3;
         UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
         UggDrawMenu ();
       }
+    } else {
       mKeyHoldActive = FALSE;
       mKeyHoldTicks  = 0;
     }
+
+    UggDrawText (16, 420, "changed pin:");
+    UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
+    UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
+    UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
+    UggDrawText (16, 440, "presses:");
+    UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
+    UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
+    UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
+    UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
   }
 
   if (mKeyHoldActive && !mKeyHoldFired) {
@@ -2210,20 +2220,6 @@ UggKeysPoll (
       UggKeyPush (0x17, 0x000D);                   /* Enter */
       UggDrawMenu ();
     }
-  }
-  UggDrawText (16, 420, "changed pin:");
-  if (mKeyChangedPin == 0xFFFF) {
-    UggDrawText (152, 420, "none ");
-  } else {
-    UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
-    UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
-    UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
-  }
-  UggDrawText (16, 440, "presses:");
-  UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
-  UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
-  UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
-  UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
 }
 
 STATIC
