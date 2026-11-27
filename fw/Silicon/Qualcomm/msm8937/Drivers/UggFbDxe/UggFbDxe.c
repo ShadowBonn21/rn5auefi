@@ -1199,6 +1199,106 @@ UggSdccPowerProbe (
   UggPrintHex (420, "pwrctl final:", UggMciRd (UGG_PWRCTL_STATUS));
 }
 
+/*
+  Настройка клока SDCC1 через GCC для msm8937.
+
+  Смещения взяты из стокового драйвера клоков Xiaomi (ветка land-m-oss,
+  файл drivers/clk/msm/clock-gcc-8936.c — msm8937 входит в это семейство):
+
+    GCC base                0x01800000
+    SDCC1_APPS_CMD_RCGR     0x42004   (+0x4 CFG, +0x8 M, +0xC N, +0x10 D)
+    SDCC1_APPS_CBCR         0x42018   (бит0 = enable ветки)
+
+  Биты (clock-local2.c):
+    CMD: бит1 = ROOT_ENABLE, бит31 = ROOT_STATUS (клок «пошёл»)
+    CFG: DIV[4:0], SRC_SEL[10:8], MND_MODE[13:12] (0x2 = dual edge для MND)
+
+  Частота = parent * N / (M * D). Для 400 кГц от XO (19.2 МГц): m=12, n=1, d=4.
+
+  Источник (SRC_SEL) подбираем сами: перебираем 0..7 и оставляем тот, при
+  котором ROOT_STATUS становится 1 — так не нужно угадывать нумерацию
+  источников в конкретном SoC.
+*/
+#define UGG_GCC_BASE            0x01800000
+#define UGG_GCC_SDCC1_CMD_RCGR  0x42004
+#define UGG_GCC_SDCC1_CBCR      0x42018
+
+STATIC
+UINT32
+UggGccRd (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT32 *)(UINTN)(UGG_GCC_BASE + Off);
+}
+
+STATIC
+VOID
+UggGccWr (
+  IN UINTN   Off,
+  IN UINT32  Value
+  )
+{
+  *(volatile UINT32 *)(UINTN)(UGG_GCC_BASE + Off) = Value;
+}
+
+/* Настроить SDCC1 apps clock на 400 кГц и включить ветку. TRUE — удалось. */
+STATIC
+BOOLEAN
+UggSdccClockInit (
+  VOID
+  )
+{
+  UINTN   Src;
+  UINTN   I;
+  UINT32  Cmd;
+  BOOLEAN  Ok = FALSE;
+
+  for (Src = 0; Src < 8; Src++) {
+    /* M=12, N=1, D=4  ->  400 кГц от XO */
+    UggGccWr (UGG_GCC_SDCC1_CMD_RCGR + 0x8, 12);
+    UggGccWr (UGG_GCC_SDCC1_CMD_RCGR + 0xC, 1);
+    UggGccWr (UGG_GCC_SDCC1_CMD_RCGR + 0x10, 4);
+
+    /* CFG: SRC_SEL = Src, DIV = 0, MND dual-edge mode */
+    UggGccWr (
+      UGG_GCC_SDCC1_CMD_RCGR + 0x4,
+      (UINT32)((0x2u << 12) | ((Src & 0x7u) << 8))
+      );
+
+    /* ROOT_ENABLE */
+    Cmd  = UggGccRd (UGG_GCC_SDCC1_CMD_RCGR);
+    Cmd |= (1u << 1);
+    UggGccWr (UGG_GCC_SDCC1_CMD_RCGR, Cmd);
+
+    /* ждём ROOT_STATUS (бит 31) */
+    for (I = 0; I < 20000; I++) {
+      if ((UggGccRd (UGG_GCC_SDCC1_CMD_RCGR) & (1u << 31)) != 0) {
+        Ok = TRUE;
+        break;
+      }
+    }
+    if (Ok) {
+      break;
+    }
+  }
+
+  /* включить ветку SDCC1 apps (бит 0) */
+  if (Ok) {
+    UggGccWr (UGG_GCC_SDCC1_CBCR, UggGccRd (UGG_GCC_SDCC1_CBCR) | 0x1);
+  } else {
+    Src = 0xFF;
+  }
+
+  UggDrawText (16, 300, "sdcc1 clk src:");
+  UggDrawChar (144, 300, (Src < 8) ? (CHAR8)('0' + Src) : 'X');
+  UggDrawText (16, 320, "clk on:");
+  UggDrawText (80, 320, UggYesNo (Ok));
+  UggPrintHex (340, "cmd rcgr:", UggGccRd (UGG_GCC_SDCC1_CMD_RCGR));
+  UggPrintHex (360, "cbr:", UggGccRd (UGG_GCC_SDCC1_CBCR));
+  return Ok;
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1388,6 +1488,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 11) {
     UggSdccPowerProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 12) {
+    UggSdccClockInit ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
