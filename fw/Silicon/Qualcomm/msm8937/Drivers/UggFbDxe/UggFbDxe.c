@@ -560,6 +560,35 @@ STATIC EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  mUggTextOut = {
 #define UGG_TLMM_BASE   0x01000000
 #define UGG_VOLUP_GPIO  91
 
+/*
+  Настроить пин как GPIO с подтяжкой вверх. Без этого чтение уровня
+  бессмысленно: LK/UEFI пин не мультиплексировали, и FUNC_SEL может указывать
+  на периферию, а не на GPIO.
+
+  QCOM TLMM (v1, msm8937): GPIO_CFG биты [2:0] = FUNC_SEL (0 = GPIO),
+  биты [4:3] = PULL (0b11 = pull-up), бит [9] = OE (0 = вход).
+*/
+STATIC
+UINT32
+UggVolUpCfg (
+  VOID
+  )
+{
+  return *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
+}
+
+STATIC
+VOID
+UggVolUpSetup (
+  VOID
+  )
+{
+  volatile UINT32  *Cfg = (volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
+
+  /* FUNC_SEL = 0 (GPIO), PULL = 0b11 (pull-up), OE = 0 (вход) */
+  *Cfg = 0x00000018;
+}
+
 STATIC
 UINTN
 UggVolUpPressed (
@@ -583,10 +612,14 @@ UggKeyPollCallback (
   )
 {
   UINTN                          Pressed = UggVolUpPressed ();
+  UINT32                         Cfg = UggVolUpCfg ();
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+  STATIC CONST CHAR8             Hex[] = "0123456789ABCDEF";
 
-  FbFillRect (660, 200, 60, 100, &Black);
-  UggDrawChar (660, 200, Pressed ? '1' : '0');
+  FbFillRect (600, 200, 120, 100, &Black);
+  UggDrawChar (600, 200, Pressed ? '1' : '0');          /* уровень пина */
+  UggDrawChar (620, 200, Hex[(Cfg >> 4) & 0xF]);        /* CFG, старший ниббл */
+  UggDrawChar (640, 200, Hex[Cfg & 0xF]);               /* CFG, младший ниббл */
 }
 
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
@@ -755,6 +788,8 @@ UggFbDxeInitialize (
 
   /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
   UggDrawText (16, 4, "Ugg UEFI  MSM8940  Redmi Note 5A Prime");
+
+  UggVolUpSetup ();
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
     Status = gBS->CreateEvent (
