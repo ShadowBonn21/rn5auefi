@@ -2007,6 +2007,200 @@ UggPinOnce (
   }
   UggDrawText (16, Y + 10, "all reads done");
 }
+/*
+  ============================ ВВОД С КНОПОК ============================
+
+  Реализуем EFI_SIMPLE_TEXT_INPUT_PROTOCOL и своё меню, чтобы кнопки
+  работали вне зависимости от BDS/Shell/SimpleInit.
+
+  Источник нажатий — чтение уровней TLMM (только чтение, это проверенно
+  безопасно). Опрашиваем пины 88..94: нажатие любой кнопки меняет уровень
+  одного из них. Изменение превращается в нажатие клавиши:
+
+      любой пин  -> Стрелка вниз (перевод по меню)
+      пин 91     -> Enter (выбор пункта)
+
+  На экране видно: уровни пинов, номер изменившегося пина, счётчик нажатий
+  и наше меню с подсветкой — то есть результат нажатий виден сразу.
+*/
+#define UGG_KEY_FIRST  88
+#define UGG_KEY_LAST   94
+#define UGG_KEY_COUNT  (UGG_KEY_LAST - UGG_KEY_FIRST + 1)
+#define UGG_KEY_QUEUE  16
+
+STATIC UINT8                             mKeyPrev[UGG_KEY_COUNT];
+STATIC BOOLEAN                           mKeyPrevValid = FALSE;
+STATIC UINTN                             mKeyChangedPin = 0xFFFF;
+STATIC UINTN                             mKeyPressCount = 0;
+
+STATIC EFI_KEY_DATA                      mKeyQueue[UGG_KEY_QUEUE];
+STATIC UINTN                             mKeyHead = 0;
+STATIC UINTN                             mKeyTail = 0;
+STATIC EFI_EVENT                         mKeyWaitEvent = NULL;
+STATIC EFI_SIMPLE_TEXT_INPUT_PROTOCOL    mUggConIn;
+STATIC UINTN                             mMenuIndex = 0;
+STATIC UINTN                             mMenuChosen = 0xFFFF;
+
+STATIC
+VOID
+UggKeyPush (
+  IN UINT16  ScanCode,
+  IN CHAR16  Unicode
+  )
+{
+  UINTN  Next = (mKeyHead + 1) % UGG_KEY_QUEUE;
+
+  if (Next == mKeyTail) {
+    return;                      /* очередь полна — нажатие теряем */
+  }
+  mKeyQueue[mKeyHead].Key.ScanCode    = ScanCode;
+  mKeyQueue[mKeyHead].Key.UnicodeChar = Unicode;
+  mKeyQueue[mKeyHead].KeyState.KeyShiftState  = 0;
+  mKeyQueue[mKeyHead].KeyState.KeyToggleState = 0;
+  mKeyHead = Next;
+
+  if (mKeyWaitEvent != NULL) {
+    gBS->SignalEvent (mKeyWaitEvent);
+  }
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggConInReset (
+  IN EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *This,
+  IN BOOLEAN                         ExtendedVerification
+  )
+{
+  mKeyTail = mKeyHead;
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+UggConInReadKeyStroke (
+  IN  EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *This,
+  OUT EFI_INPUT_KEY                   *Key
+  )
+{
+  if (mKeyTail == mKeyHead) {
+    return EFI_NOT_READY;
+  }
+  *Key    = mKeyQueue[mKeyTail].Key;
+  mKeyTail = (mKeyTail + 1) % UGG_KEY_QUEUE;
+  return EFI_SUCCESS;
+}
+
+/* Нарисовать меню: три пункта, подсветка '>' и отмеченный выбор. */
+STATIC
+VOID
+UggDrawMenu (
+  VOID
+  )
+{
+  STATIC CONST CHAR8  *Items[3] = {
+    "Boot from eMMC",
+    "Boot from USB",
+    "UEFI Shell"
+  };
+  UINTN  I;
+
+  UggDrawText (16, 560, "---- UGG MENU (buttons) ----");
+  for (I = 0; I < 3; I++) {
+    UggDrawText (32, 600 + I * 24, (I == mMenuIndex) ? ">" : " ");
+    UggDrawText (48, 600 + I * 24, Items[I]);
+    if (I == mMenuChosen) {
+      UggDrawText (240, 600 + I * 24, "<- selected");
+    }
+  }
+  UggDrawText (16, 700, "press VOL+ / VOL- to move");
+  UggDrawText (16, 720, "press POWER to select");
+}
+
+/* Опрос кнопок: чтение уровней 88..94 и превращение изменений в нажатия. */
+STATIC
+VOID
+UggKeysPoll (
+  VOID
+  )
+{
+  UINTN   Idx;
+  UINTN   Pin;
+  UINT32  Level;
+  BOOLEAN Changed = FALSE;
+
+  for (Idx = 0; Idx < UGG_KEY_COUNT; Idx++) {
+    Pin   = UGG_KEY_FIRST + Idx;
+    Level = *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pin + 1) + 4) & 1;
+
+    if (mKeyPrevValid && ((UINT8)Level != mKeyPrev[Idx])) {
+      mKeyChangedPin = Pin;
+      mKeyPressCount++;
+      Changed = TRUE;
+    }
+    mKeyPrev[Idx] = (UINT8)Level;
+
+    /* индикация уровня пина */
+    UggDrawChar (24 + Idx * 40, 300, (CHAR8)('0' + (UINT8)Level));
+  }
+  mKeyPrevValid = TRUE;
+
+  if (Changed) {
+    if (mKeyChangedPin == 91) {
+      /* выбор пункта */
+      mMenuChosen = mMenuIndex;
+      UggKeyPush (0x17, 0x000D);        /* SCAN_ESC? нет: Enter */
+    } else {
+      /* перевод по меню */
+      mMenuIndex = (mMenuIndex + 1) % 3;
+      UggKeyPush (0x02, 0x0000);        /* SCAN_DOWN */
+    }
+    UggDrawMenu ();
+  }
+
+  UggDrawText (16, 420, "changed pin:");
+  if (mKeyChangedPin == 0xFFFF) {
+    UggDrawText (152, 420, "none ");
+  } else {
+    UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
+    UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
+    UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
+  }
+  UggDrawText (16, 440, "presses:");
+  UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
+  UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
+  UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
+  UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
+}
+
+STATIC
+VOID
+EFIAPI
+UggKeysPollCallback (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  UggKeysPoll ();
+}
+
+/* Инициализация ввода: событие ожидания, протокол, меню. */
+STATIC
+VOID
+UggInputInit (
+  VOID
+  )
+{
+  gBS->CreateEvent (EVT_NOTIFY_WAIT, TPL_NOTIFY, NULL, NULL, &mKeyWaitEvent);
+
+  mUggConIn.Reset         = UggConInReset;
+  mUggConIn.ReadKeyStroke = UggConInReadKeyStroke;
+  mUggConIn.WaitForKey    = mKeyWaitEvent;
+
+  UggDrawMenu ();
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -2085,6 +2279,8 @@ UggFbDxeInitialize (
                   &mUggFb.Gop,
                   &gEfiSimpleTextOutProtocolGuid,
                   &mUggTextOut,
+                  &gEfiSimpleTextInputProtocolGuid,
+                  &mUggConIn,
                   &gEfiDevicePathProtocolGuid,
                   (EFI_DEVICE_PATH_PROTOCOL *)mFbDevicePath,
                   NULL
@@ -2169,6 +2365,17 @@ UggFbDxeInitialize (
     gST->ConOut остаётся пустой консолью, OutputString возвращает успех,
     а на экране ничего не появляется.
   */
+  /* Ввод с кнопок: протокол + таймер опроса (без него меню не работает). */
+  UggInputInit ();
+  {
+    EFI_EVENT  TimerEvent = NULL;
+
+    gBS->CreateEvent (EVT_TIMER | EVT_NOTIFY_SIGNAL, TPL_CALLBACK, UggKeysPollCallback, NULL, &TimerEvent);
+    if (TimerEvent != NULL) {
+      gBS->SetTimer (TimerEvent, TimerPeriodic, 300000);   /* 0.3 с */
+    }
+  }
+
   gBS->ConnectController (Handle, NULL, NULL, TRUE);
 
   /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
