@@ -1378,6 +1378,165 @@ UggSdccInit4 (
   UggPrintHex (460, "pwrctl final:", UggMciRd (UGG_PWRCTL_STATUS));
 }
 
+/*
+  Минимальный SPMI-мастер (PMIC Arbiter v2) для msm8937.
+
+  Нужен, чтобы управлять PMIC: питание eMMC (сейчас BUS_OFF) и кнопки PON.
+
+  Адреса из device tree (arch/arm/boot/dts/qcom/msm8937.dtsi, узел
+  qcom,spmi@200f000):
+      core  0x0200F000 (0x1000)   — версия арбитра
+      cnfg  0x0200A000 (0x2100)   — таблица PPID->канал, по смещению 0x0B00
+      chnls 0x02400000 (0x800000) — окна каналов
+      qcom,pmic-arb-ee = 0        — исполнительное окружение APSS
+
+  Окно канала: chnls + 0x8000 * apid + 0x1000 * ee
+    CMD     0x00   (opc<<27) | ((addr & 0xFF) << 4) | (bc & 7)
+    STATUS  0x08   бит0 DONE, бит1 FAILURE, бит2 DENIED, бит3 DROPPED
+    RDATA0  0x18
+  opcode EXT_READ = 13, EXT_WRITE = 2.
+
+  Таблица PPID->канал — бинарное дерево из 4-байтовых записей:
+    бит[21:18] — номер бита PPID, [17] флаг «есть ветка 0», [16:9] результат 0,
+    [8] флаг «есть ветка 1», [7:0] результат ветки 1.
+*/
+#define UGG_SPMI_CORE    0x0200F000
+#define UGG_SPMI_CNFG    0x0200A000
+#define UGG_SPMI_CHNLS   0x02400000
+#define UGG_SPMI_EE      0
+
+STATIC
+UINT32
+UggSpmiRd (
+  IN UINTN  Addr
+  )
+{
+  return *(volatile UINT32 *)(UINTN)Addr;
+}
+
+STATIC
+VOID
+UggSpmiWr (
+  IN UINTN   Addr,
+  IN UINT32  Value
+  )
+{
+  *(volatile UINT32 *)(UINTN)Addr = Value;
+}
+
+/* Найти канал (apid) для пары (sid, addr>>8). FALSE — не найдено. */
+STATIC
+BOOLEAN
+UggSpmiFindChannel (
+  IN  UINT8  Sid,
+  IN  UINT8  Periph,
+  OUT UINT8  *Apid
+  )
+{
+  UINT16  Ppid = (UINT16)(((UINT16)Sid << 8) | Periph);
+  UINTN   Index = 0;
+  UINTN   I;
+  UINT32  Data;
+  UINTN   Bit;
+  BOOLEAN Branch;
+
+  for (I = 0; I < 16; I++) {
+    Data = UggSpmiRd (UGG_SPMI_CNFG + 0x0B00 + Index * 4);
+    Bit  = (Data >> 18) & 0xF;
+
+    Branch = ((Ppid >> Bit) & 0x1) ? (BOOLEAN)TRUE : (BOOLEAN)FALSE;
+
+    if (Branch) {
+      if ((Data >> 8) & 0x1) {
+        /* есть ветка 1 -> идём дальше по дереву */
+        Index = (Data >> 0) & 0xFF;
+      } else {
+        *Apid = (UINT8)((Data >> 0) & 0xFF);
+        return TRUE;
+      }
+    } else {
+      if ((Data >> 17) & 0x1) {
+        Index = (Data >> 9) & 0xFF;
+      } else {
+        *Apid = (UINT8)((Data >> 9) & 0xFF);
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/* Прочитать байт из PMIC. Возвращает TRUE при успехе. */
+STATIC
+BOOLEAN
+UggSpmiReadByte (
+  IN  UINT8  Sid,
+  IN  UINT8  Periph,
+  IN  UINT8  Reg,
+  OUT UINT8  *Value
+  )
+{
+  UINT8    Apid;
+  UINTN    Chan;
+  UINTN    I;
+  UINT32   Cmd;
+  UINT32   Status;
+
+  if (!UggSpmiFindChannel (Sid, Periph, &Apid)) {
+    return FALSE;
+  }
+
+  Chan = UGG_SPMI_CHNLS + 0x8000 * Apid + 0x1000 * UGG_SPMI_EE;
+
+  /* CMD: EXT_READ (13), адрес регистра, 1 байт */
+  Cmd = (UINT32)((13u << 27) | (((UINT32)Reg & 0xFFu) << 4) | 0u);
+  UggSpmiWr (Chan + 0x00, Cmd);
+
+  for (I = 0; I < 100000; I++) {
+    Status = UggSpmiRd (Chan + 0x08);
+    if ((Status & 0x1) != 0) {
+      break;
+    }
+  }
+  if (I >= 100000) {
+    return FALSE;
+  }
+  if ((Status & 0x0E) != 0) {      /* FAILURE / DENIED / DROPPED */
+    return FALSE;
+  }
+
+  *Value = (UINT8)(UggSpmiRd (Chan + 0x18) & 0xFF);
+  return TRUE;
+}
+
+STATIC
+VOID
+UggSpmiProbe (
+  VOID
+  )
+{
+  UINT8    Apid = 0xFF;
+  UINT8    RevId = 0;
+  BOOLEAN  Found;
+  BOOLEAN  Ok;
+
+  UggPrintHex (300, "spmi version:", UggSpmiRd (UGG_SPMI_CORE + 0x0000));
+
+  Found = UggSpmiFindChannel (0, 0, &Apid);
+  UggDrawText (16, 320, "ppid0 channel:");
+  UggHex (176, 320, Found ? Apid : 0xFFFFFFFF);
+
+  /* PMIC top-level: sid 0, peripheral 0, регистр 0x04 = REVID */
+  Ok = UggSpmiReadByte (0, 0, 0x04, &RevId);
+  UggDrawText (16, 340, "pmic revid read:");
+  UggDrawText (192, 340, UggYesNo (Ok));
+  UggPrintHex (360, "revid:", RevId);
+
+  /* и ещё пару регистров для контроля */
+  Ok = UggSpmiReadByte (0, 0, 0x05, &RevId);
+  UggPrintHex (380, "reg5:", RevId);
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1575,6 +1734,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 13) {
     UggSdccInit4 ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 14) {
+    UggSpmiProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
