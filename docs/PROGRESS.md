@@ -146,3 +146,64 @@ SDCC не инициализирован, поэтому команды «не �
 | `tools/list_fv_order.py` | фактический порядок файлов в FV |
 | `tools/test_size.py`, `test_bootshim.py`, `test_fd_stub*.py` | проверки загрузки и точек входа |
 | `tools/decode_guid_barcode.py` | расшифровка GUID драйвера по фото экрана |
+
+## eMMC (G3): журнал измерений
+
+Все значения сняты на устройстве через драйвер дисплея (текстовый вывод).
+
+### Базовые адреса (из device tree, `tools/dtb_node.py build/ugg.dtb sdhci`)
+
+```
+/soc/sdhci@7824900   compatible = "qcom,sdhci-msm"
+  hc_mem   0x07824900 (0x500)
+  core_mem 0x07824000 (0x800)
+  cmdq_mem 0x07824E00 (0x200)
+  irq      0x7B (hc), 0x8A (pwr)
+  bus-width 8, nonremovable  -> eMMC
+  clock-names: iface_clk, core_clk, ice_core_clk
+```
+
+### Что показал контроллер
+
+| Регистр | Значение | Смысл |
+|---|---|---|
+| SDHCI CAPABILITIES (hc+0x40) | `0x342DCB02` | контроллер живой, SDHCI-совместим |
+| PRESENT_STATE (hc+0x24) | `0x01F80000` | шина не занята |
+| CLOCK_CONTROL (hc+0x2C) | `0x0007` | клок был включён LK |
+| MCI_VERSION (core+0x50) | `0x10000040` | major=1, minor=0x40 |
+| MCI_HC_MODE (core+0x78) | было `0`, стало `1` | **SDHCI-режим был выключен**; мы его включаем (бит 0), плюс бит 13 = FF_CLK_SW_RST_DIS |
+| PWRCTL_STATUS (core+0x0DC) | `0x00000002` | **BUS_OFF** — питание карты не подано |
+| SDHCI SW_RESET (hc+0x2F) | self-clear OK | сброс проходит |
+| CMD0 / CMD1 | TIMEOUT, int/err status = 0 | команды не исполняются, пока шина обесточена |
+
+### Вывод
+
+Порядок для eMMC: **сначала питание (vdd/vdd-io через PMIC/RPM), затем SDHCI init, затем команды**.
+Без питания контроллер держит BUS_OFF и не отправляет команды (ни complete, ни error).
+
+### Опорные источники (найдены и изучены)
+
+* `msm8916-mainline/lk2nd` — `platform/msm_shared/{sdhci.c,sdhci_msm.c}`, `include/sdhci_msm.h`:
+  последовательность init LK, `SDCC_MCI_HC_MODE`, регистры DLL/CDC.
+* `WOA-Project/Lumia950XLPkg/Driver/SdhciMMCHSDxe` — **полный UEFI-драйвер**
+  SDHCI/eMMC с `EFI_BLOCK_IO_PROTOCOL` (`mmc_sdhci.c` 70 КБ, `sdhci.c`,
+  `sdhci_msm.c`, `MMCHS.c`, `SdhciMMCHS.inf`). Готовый образец для порта.
+* Из его `Shared.dsc.inc` — смещения регистров питания:
+  `MCI_HC_MODE=0x78`, `PWRCTL_STATUS=0xDC`, `PWRCTL_MASK=0xE0`,
+  `PWRCTL_CLEAR=0xE4`, `PWRCTL_CTL=0xE8`.
+* Из `Include/Platform/iomap.h` — раскладка GCC для SDCC1:
+  `SDCC1_BCR=CLK_CTL+0x4C0`, `SDCC1_APPS_CBCR=+0x4C4`, `SDCC1_AHB_CBCR=+0x4C8`,
+  `SDCC1_CMD_RCGR=+0x4D0`, `SDCC1_CFG_RCGR=+0x4D4`, `SDCC1_M=+0x4D8`,
+  `SDCC1_N=+0x4DC`, `SDCC1_D=+0x4E0` (значения для msm8994; для msm8937
+  смещения надо уточнить по downstream-ядру).
+
+### Следующие шаги (по порядку)
+
+1. Поднять питание eMMC: vdd и vdd-io (`vdd-supply`/`vdd-io-supply` из DT).
+   Это PMIC/RPM-путь; после него PWRCTL_STATUS должен показать BUS_ON (бит 0).
+2. Проверить клоки GCC (`apps_clk` для SDCC1) — если apps_clk не идёт,
+   команды уйдут «в никуда» даже при питании.
+3. Портировать `SdhciMMCHSDxe` как `UggSdccDxe`: инициализация eMMC
+   (CMD0/1/2/3/9/7/6/8), ширина 8 бит, HS200, затем `EFI_BLOCK_IO_PROTOCOL`.
+4. На выходе: `PartitionDxe` + `Fat` увидят разделы, и станет возможна
+   загрузка Linux (`LinuxLoader`/GRUB + ядро + rootfs).
