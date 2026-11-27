@@ -847,6 +847,187 @@ UggSdccDump (
   }
 }
 
+/*
+  Правильная инициализация SDCC1 для eMMC (по последовательности LK/lk2nd).
+
+  У контроллера ДВЕ базы:
+    hc_mem   = 0x07824900 — SDHCI-регистры (0x00..0x1FF)
+    core_mem = 0x07824000 — вендорские MCI-регистры:
+                           0x050 MCI_VERSION
+                           0x078 MCI_HC_MODE: бит0 = SDHCI mode,
+                                 бит13 = FF_CLK_SW_RST_DIS
+
+  Без включения SDHCI-режима (core_mem+0x78 бит0) команды не исполняются:
+  именно это мы наблюдали — CMD0 «тишина», статусы нулевые.
+
+  Порядок (как в LK):
+    1. HC_MODE: SDHCI mode = 1, FF_CLK_SW_RST_DIS = 1
+    2. VENDOR_SPECIFIC_FUNC (hc+0x10C) = 0xA1C
+    3. SDHCI software reset ALL
+    4. power control = 3.3 V
+    5. clock: внутренний клок -> stable -> SD clock
+    6. CMD0 (GO_IDLE_STATE), затем CMD1 (SEND_OP_COND, OCR)
+*/
+#define UGG_SDCC_CORE   0x07824000
+#define UGG_SDCC_HC     0x07824900
+
+STATIC
+UINT32
+UggMciRd (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT32 *)(UINTN)(UGG_SDCC_CORE + Off);
+}
+
+STATIC
+VOID
+UggMciWr (
+  IN UINTN   Off,
+  IN UINT32  Value
+  )
+{
+  *(volatile UINT32 *)(UINTN)(UGG_SDCC_CORE + Off) = Value;
+}
+
+STATIC
+UINT16
+UggHcRd16 (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT16 *)(UINTN)(UGG_SDCC_HC + Off);
+}
+
+STATIC
+VOID
+UggHcWr16 (
+  IN UINTN   Off,
+  IN UINT16  Value
+  )
+{
+  *(volatile UINT16 *)(UINTN)(UGG_SDCC_HC + Off) = Value;
+}
+
+STATIC
+VOID
+UggHcWr (
+  IN UINTN   Off,
+  IN UINT32  Value
+  )
+{
+  *(volatile UINT32 *)(UINTN)(UGG_SDCC_HC + Off) = Value;
+}
+
+STATIC
+UINT32
+UggHcRd (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT32 *)(UINTN)(UGG_SDCC_HC + Off);
+}
+
+STATIC
+CHAR8 *
+UggYesNo (
+  IN BOOLEAN  Ok
+  )
+{
+  return Ok ? "OK" : "TIMEOUT";
+}
+
+/* Отправить команду и подождать command complete. Возвращает TRUE при успехе. */
+STATIC
+BOOLEAN
+UggSdCmd (
+  IN UINT16  CmdReg
+  )
+{
+  UINTN   I;
+  UINT16  IntStat;
+
+  UggHcWr16 (0x30, 0xFFFF);      /* очистить normal int */
+  UggHcWr16 (0x32, 0xFFFF);      /* очистить error int */
+  UggHcWr16 (0x0E, CmdReg);      /* COMMAND */
+
+  for (I = 0; I < 50000; I++) {
+    IntStat = UggHcRd16 (0x30);
+    if ((IntStat & 0x8000) != 0) {       /* ERROR_INTERRUPT */
+      return FALSE;
+    }
+    if ((IntStat & 0x0001) != 0) {       /* COMMAND_COMPLETE */
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+STATIC
+VOID
+UggSdccInit2 (
+  VOID
+  )
+{
+  UINT32   Reg;
+  UINTN    I;
+  BOOLEAN  Ok;
+
+  UggPrintHex (300, "MCI version:", UggMciRd (0x050));
+  UggPrintHex (320, "MCI hc mode:", UggMciRd (0x078));
+
+  /* 1) включить SDHCI-режим (бит0) и запретить сброс клока (бит13) */
+  Reg  = UggMciRd (0x078);
+  Reg |= (1u << 0) | (1u << 13);
+  UggMciWr (0x078, Reg);
+  UggPrintHex (340, "hc mode now:", UggMciRd (0x078));
+
+  /* 2) вендорский конфиг, как у LK */
+  UggHcWr (0x10C, 0xA1C);
+
+  /* 3) software reset ALL и ожидание (не более ~100 мс) */
+  UggHcWr16 (0x2F, 0x1);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2F) & 0x1) == 0) {
+      break;
+    }
+  }
+  Ok = (I < 20000);
+  UggDrawText (16, 360, "sdhci reset:");
+  UggDrawText (128, 360, UggYesNo (Ok));
+
+  /* 4) питание шины 3.3 В */
+  UggHcWr16 (0x29, 0x0F);
+
+  /* 5) клок: внутренний -> stable -> SD clock (делитель /2) */
+  UggHcWr16 (0x2C, 0x0001);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2C) & 0x0002) != 0) {
+      break;
+    }
+  }
+  Ok = (I < 20000);
+  UggDrawText (16, 380, "int clock:");
+  UggDrawText (112, 380, UggYesNo (Ok));
+  UggHcWr16 (0x2C, 0x0007);
+  UggPrintHex (400, "clock ctl:", UggHcRd16 (0x2C));
+
+  /* 6) CMD0 */
+  UggHcWr (0x08, 0);
+  Ok = UggSdCmd (0x0000);
+  UggDrawText (16, 420, "CMD0:");
+  UggDrawText (80, 420, UggYesNo (Ok));
+  UggPrintHex (440, "int status:", UggHcRd (0x30));
+
+  /* 7) CMD1: SEND_OP_COND, ответ R3 (48 бит), OCR в аргументе */
+  UggHcWr (0x08, 0x40FF8080);
+  Ok = UggSdCmd (0x0102);
+  UggDrawText (16, 460, "CMD1:");
+  UggDrawText (80, 460, UggYesNo (Ok));
+  UggPrintHex (480, "OCR:", UggHcRd (0x10));
+  UggPrintHex (500, "err status:", UggHcRd (0x32));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1024,6 +1205,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 8) {
     UggSdccDump (300);
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 9) {
+    UggSdccInit2 ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
