@@ -633,6 +633,52 @@ UggKeyPollCallback (
   UggKeyScan ();
 }
 
+/*
+  Проба контроллера eMMC (SDCC1).
+
+  LK только что грузился с этой eMMC, поэтому клоки SDCC1 включены и читать
+  регистры безопасно. SDCC у Qualcomm совместим с SDHCI:
+    0x040 — CAPABILITIES
+    0x0FE — HOST_VERSION
+    0x024 — PRESENT_STATE
+    0x020 — CLOCK_CONTROL
+  Печатаем их текстом: по значениям видно, отвечает ли контроллер и какие
+  режимы поддерживает (нужно для будущего драйвера eMMC).
+*/
+#define UGG_SDCC1_BASE  0x07824900
+
+STATIC
+VOID
+UggHex (
+  IN UINTN   X,
+  IN UINTN   Y,
+  IN UINT32  Value
+  )
+{
+  STATIC CONST CHAR8  Hex[] = "0123456789ABCDEF";
+  UINTN               I;
+
+  for (I = 0; I < 8; I++) {
+    UggDrawChar (X + I * 8, Y, Hex[(Value >> ((7 - I) * 4)) & 0xF]);
+  }
+}
+
+STATIC
+VOID
+UggProbeSdcc (
+  VOID
+  )
+{
+  UggDrawText (16, 300, "SDCC1 capabilities:");
+  UggHex (192, 300, *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x040));
+  UggDrawText (16, 320, "SDCC1 version:");
+  UggHex (128, 320, *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x0FE));
+  UggDrawText (16, 340, "SDCC1 present state:");
+  UggHex (176, 340, *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x024));
+  UggDrawText (16, 360, "SDCC1 clock control:");
+  UggHex (176, 360, *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x020));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -799,6 +845,10 @@ UggFbDxeInitialize (
 
   /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
   UggDrawText (16, 4, "Ugg UEFI  MSM8940  Redmi Note 5A Prime");
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 6) {
+    UggProbeSdcc ();
+  }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
     Status = gBS->CreateEvent (
