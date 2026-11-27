@@ -2031,6 +2031,7 @@ UggPinOnce (
 STATIC UINT8                             mKeyPrev[UGG_KEY_COUNT];
 STATIC BOOLEAN                           mKeyPrevValid = FALSE;
 STATIC UINTN                             mKeyChangedPin = 0xFFFF;
+STATIC UINT8                             mKeyNowLevel = 1;
 STATIC UINTN                             mKeyPressCount = 0;
 
 STATIC EFI_KEY_DATA                      mKeyQueue[UGG_KEY_QUEUE];
@@ -2040,6 +2041,10 @@ STATIC EFI_EVENT                         mKeyWaitEvent = NULL;
 STATIC EFI_SIMPLE_TEXT_INPUT_PROTOCOL    mUggConIn;
 STATIC UINTN                             mMenuIndex = 0;
 STATIC UINTN                             mMenuChosen = 0xFFFF;
+STATIC UINTN                             mKeyHoldPin = 0xFFFF;
+STATIC UINTN                             mKeyHoldTicks = 0;
+STATIC BOOLEAN                           mKeyHoldActive = FALSE;
+STATIC BOOLEAN                           mKeyHoldFired = FALSE;
 
 STATIC
 VOID
@@ -2136,6 +2141,7 @@ UggKeysPoll (
 
     if (mKeyPrevValid && ((UINT8)Level != mKeyPrev[Idx])) {
       mKeyChangedPin = Pin;
+      mKeyNowLevel = (UINT8)Level;
       mKeyPressCount++;
       Changed = TRUE;
     }
@@ -2146,19 +2152,42 @@ UggKeysPoll (
   }
   mKeyPrevValid = TRUE;
 
+  /*
+    Логика кнопок:
+
+      нажатие (уровень 0)   -> отпускание даёт перевод по меню
+      удержание > 1.2 с     -> выбор пункта (Enter)
+
+    Период опроса 50 мс: удержание считается как 24 опроса.
+    Полярность активного уровня определяем по факту: считаем нажатием
+    переход в 0 (типично для этих плат), отпусканием — обратно в 1.
+  */
   if (Changed) {
-    if (mKeyChangedPin == 91) {
-      /* выбор пункта */
-      mMenuChosen = mMenuIndex;
-      UggKeyPush (0x17, 0x000D);        /* SCAN_ESC? нет: Enter */
+    if (mKeyNowLevel == 0) {
+      mKeyHoldPin   = mKeyChangedPin;
+      mKeyHoldTicks = 0;
+      mKeyHoldActive = TRUE;
+      mKeyHoldFired  = FALSE;
     } else {
-      /* перевод по меню */
-      mMenuIndex = (mMenuIndex + 1) % 3;
-      UggKeyPush (0x02, 0x0000);        /* SCAN_DOWN */
+      if (mKeyHoldActive && !mKeyHoldFired) {
+        mMenuIndex = (mMenuIndex + 1) % 3;
+        UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
+        UggDrawMenu ();
+      }
+      mKeyHoldActive = FALSE;
+      mKeyHoldTicks  = 0;
     }
-    UggDrawMenu ();
   }
 
+  if (mKeyHoldActive && !mKeyHoldFired) {
+    mKeyHoldTicks++;
+    if (mKeyHoldTicks > 24) {                      /* 24 * 50 мс = 1.2 с */
+      mKeyHoldFired = TRUE;
+      mMenuChosen   = mMenuIndex;
+      UggKeyPush (0x17, 0x000D);                   /* Enter */
+      UggDrawMenu ();
+    }
+  }
   UggDrawText (16, 420, "changed pin:");
   if (mKeyChangedPin == 0xFFFF) {
     UggDrawText (152, 420, "none ");
@@ -2372,7 +2401,7 @@ UggFbDxeInitialize (
 
     gBS->CreateEvent (EVT_TIMER | EVT_NOTIFY_SIGNAL, TPL_CALLBACK, UggKeysPollCallback, NULL, &TimerEvent);
     if (TimerEvent != NULL) {
-      gBS->SetTimer (TimerEvent, TimerPeriodic, 300000);   /* 0.3 с */
+      gBS->SetTimer (TimerEvent, TimerPeriodic, 500000);   /* 50 мс */
     }
   }
 
