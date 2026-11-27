@@ -1537,6 +1537,47 @@ UggSpmiProbe (
   UggPrintHex (380, "reg5:", RevId);
 }
 
+/*
+  Пошаговая проба SPMI: метка рисуется ДО обращения к очередному блоку,
+  поэтому по экрану видно, на каком именно обращении устройство зависло.
+
+  Уточнение из драйвера (spmi-pmic-arb.c, v2):
+      wr_base = "chnls"  (0x02400000) — сюда пишутся CMD
+      rd_base = "obsrvr" (0x02C00000) — отсюда читаются STATUS и RDATA
+  Раньше мы опрашивали статус по chnls — это неверно.
+*/
+#define UGG_SPMI_OBSRVR  0x02C00000
+
+
+STATIC
+VOID
+UggSpmiProbe2 (
+  VOID
+  )
+{
+  UINT32  Val;
+
+  /* 1) только ядро арбитра */
+  UggDrawText (16, 300, "1 core:");
+  Val = UggSpmiRd (UGG_SPMI_CORE + 0x0000);
+  UggPrintHex (300, "   val:", Val);
+
+  /* 2) регион конфигурации (таблица mapping) */
+  UggDrawText (16, 320, "2 cnfg:");
+  Val = UggSpmiRd (UGG_SPMI_CNFG + 0x0B00);
+  UggPrintHex (320, "   val:", Val);
+
+  /* 3) окно каналов (chnls) */
+  UggDrawText (16, 340, "3 chnls:");
+  Val = UggSpmiRd (UGG_SPMI_CHNLS + 0x0000);
+  UggPrintHex (340, "   val:", Val);
+
+  /* 4) окно наблюдения (obsrvr) */
+  UggDrawText (16, 360, "4 obsrvr:");
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + 0x0000);
+  UggPrintHex (360, "   val:", Val);
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1738,6 +1779,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 14) {
     UggSpmiProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 15) {
+    UggSpmiProbe2 ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
