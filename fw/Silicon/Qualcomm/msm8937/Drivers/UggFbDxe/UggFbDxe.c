@@ -2032,6 +2032,8 @@ STATIC UINT8                             mKeyPrev[UGG_KEY_COUNT];
 STATIC BOOLEAN                           mKeyPrevValid = FALSE;
 STATIC UINTN                             mKeyChangedPin = 0xFFFF;
 STATIC UINT8                             mKeyNowLevel = 1;
+STATIC UINT8                             mKeyDrawn[UGG_KEY_COUNT];
+STATIC BOOLEAN                           mKeyDrawnValid = FALSE;
 STATIC UINTN                             mKeyPressCount = 0;
 
 STATIC EFI_KEY_DATA                      mKeyQueue[UGG_KEY_QUEUE];
@@ -2147,8 +2149,13 @@ UggKeysPoll (
     }
     mKeyPrev[Idx] = (UINT8)Level;
 
-    /* индикация уровня пина */
-    UggDrawChar (24 + Idx * 40, 300, (CHAR8)('0' + (UINT8)Level));
+    /* Индикация уровня: рисуем ТОЛЬКО при изменении — иначе каждый опрос
+       перерисовывает 21 символ в некэшируемую память, и всё «тупит». */
+    if (!mKeyDrawnValid || (mKeyDrawn[Idx] != (UINT8)Level)) {
+      mKeyDrawn[Idx] = (UINT8)Level;
+      UggDrawChar (24 + Idx * 40, 300, (CHAR8)('0' + (UINT8)Level));
+      mKeyDrawnValid = TRUE;
+    }
   }
   mKeyPrevValid = TRUE;
 
@@ -2181,7 +2188,7 @@ UggKeysPoll (
 
   if (mKeyHoldActive && !mKeyHoldFired) {
     mKeyHoldTicks++;
-    if (mKeyHoldTicks > 24) {                      /* 24 * 50 мс = 1.2 с */
+    if (mKeyHoldTicks > 12) {                      /* 12 * 100 мс = 1.2 с */
       mKeyHoldFired = TRUE;
       mMenuChosen   = mMenuIndex;
       UggKeyPush (0x17, 0x000D);                   /* Enter */
@@ -2401,7 +2408,7 @@ UggFbDxeInitialize (
 
     gBS->CreateEvent (EVT_TIMER | EVT_NOTIFY_SIGNAL, TPL_CALLBACK, UggKeysPollCallback, NULL, &TimerEvent);
     if (TimerEvent != NULL) {
-      gBS->SetTimer (TimerEvent, TimerPeriodic, 500000);   /* 50 мс */
+      gBS->SetTimer (TimerEvent, TimerPeriodic, 1000000);   /* 100 мс */
     }
   }
 
