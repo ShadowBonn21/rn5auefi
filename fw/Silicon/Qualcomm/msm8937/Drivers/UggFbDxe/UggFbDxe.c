@@ -1299,6 +1299,85 @@ UggSdccClockInit (
   return Ok;
 }
 
+/*
+  Правильный порядок инициализации SDCC (как в LK): reset -> ПИТАНИЕ ->
+  ожидание BUS_ON -> клок -> команды.
+
+  В предыдущих пробах мы включали клок раньше питания, поэтому контроллер
+  мог не выходить из BUS_OFF. Кроме того, уточнение по драйверу клоков:
+  бит 31 в CMD_RCGR — это ROOT_OFF, и `rcg_on_check` ждёт его СБРОСА.
+  Значит `cmd rcgr = 0x...FF2` с битом 31 = 0 означает «клок включён».
+
+  Ещё важное: ветка SDCC1 apps включается в CBCR (0x42018), AHB-ветка —
+  0x4201C; включаем обе.
+*/
+STATIC
+VOID
+UggSdccInit4 (
+  VOID
+  )
+{
+  UINTN    I;
+  UINT32   Reg;
+  BOOLEAN  Ok;
+
+  /* 0) GCC: включить AHB и apps ветки SDCC1 */
+  UggGccWr (0x4201C, UggGccRd (0x4201C) | 0x1);
+  UggGccWr (0x42018, UggGccRd (0x42018) | 0x1);
+  UggPrintHex (300, "gcc cbr:", UggGccRd (0x42018));
+  UggPrintHex (320, "gcc cmd rcgr:", UggGccRd (0x42004));
+
+  /* 1) SDHCI mode + вендорский конфиг */
+  Reg  = UggMciRd (UGG_MCI_HC_MODE);
+  Reg |= (1u << 0) | (1u << 13);
+  UggMciWr (UGG_MCI_HC_MODE, Reg);
+  UggHcWr (0x10C, 0xA1C);
+  UggMciWr (UGG_PWRCTL_MASK, 0xF);
+  UggMciWr (UGG_PWRCTL_CLEAR, 0xF);
+
+  /* 2) reset */
+  UggHcWr16 (0x2F, 0x1);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2F) & 0x1) == 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 340, "reset:");
+  UggDrawText (64, 340, UggYesNo (I < 20000));
+
+  /* 3) ПИТАНИЕ до клока */
+  UggHcWr16 (0x29, 0x0F);
+  for (I = 0; I < 200000; I++) {
+    Reg = UggMciRd (UGG_PWRCTL_STATUS);
+    if ((Reg & 0x1) != 0) {
+      break;
+    }
+  }
+  Ok = (I < 200000);
+  UggDrawText (16, 360, "bus power:");
+  UggDrawText (112, 360, UggYesNo (Ok));
+  UggPrintHex (380, "pwrctl status:", UggMciRd (UGG_PWRCTL_STATUS));
+
+  /* 4) клок после питания */
+  UggHcWr16 (0x2C, 0x0001);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2C) & 0x0002) != 0) {
+      break;
+    }
+  }
+  UggHcWr16 (0x2C, 0x0007);
+  UggDrawText (16, 400, "clock:");
+  UggDrawText (64, 400, UggYesNo (I < 20000));
+
+  /* 5) CMD0 */
+  UggHcWr (0x08, 0);
+  Ok = UggSdCmd (0x0000);
+  UggDrawText (16, 420, "CMD0:");
+  UggDrawText (80, 420, UggYesNo (Ok));
+  UggPrintHex (440, "int status:", UggHcRd (0x30));
+  UggPrintHex (460, "pwrctl final:", UggMciRd (UGG_PWRCTL_STATUS));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1492,6 +1571,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 12) {
     UggSdccClockInit ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 13) {
+    UggSdccInit4 ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
