@@ -1980,6 +1980,33 @@ UggPinScanCallback (
 {
   UggPinScan ();
 }
+/*
+  Одиночное чтение уровней TLMM (без таймера) — изоляция причины сброса.
+  Читаем 5 пинов вокруг 91 и 3 пина далеко (10, 50, 110). Если сброс
+  произойдёт — значит чтение этого диапазона недопустимо само по себе.
+*/
+STATIC
+VOID
+UggPinOnce (
+  VOID
+  )
+{
+  STATIC CONST UINTN  Pins[] = { 89, 90, 91, 92, 93, 10, 50, 110 };
+  UINTN               I;
+  UINTN               Y = 300;
+  UINT32              Level;
+
+  UggDrawText (16, 280, "single-shot TLMM read:");
+  for (I = 0; I < sizeof (Pins) / sizeof (Pins[0]); I++) {
+    UggDrawText (16, Y, "pin:");
+    UggHex (64, Y, Pins[I]);
+    UggDrawText (128, Y, "lvl:");
+    Level = *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pins[I] + 1) + 4) & 1;
+    UggHex (168, Y, Level);
+    Y += 20;
+  }
+  UggDrawText (16, Y + 10, "all reads done");
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -2209,6 +2236,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 21) {
     UggSpmiAddrProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 23) {
+    UggPinOnce ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5) || (FixedPcdGet32 (PcdDebugStageBands) == 22)) {
