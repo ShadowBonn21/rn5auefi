@@ -1404,6 +1404,9 @@ UggSdccInit4 (
 #define UGG_SPMI_CNFG    0x0200A000
 #define UGG_SPMI_CHNLS   0x02400000
 #define UGG_SPMI_EE      0
+#ifndef UGG_SPMI_OBSRVR
+#define UGG_SPMI_OBSRVR  0x02C00000
+#endif
 
 STATIC
 UINT32
@@ -1486,14 +1489,18 @@ UggSpmiReadByte (
     return FALSE;
   }
 
-  Chan = UGG_SPMI_CHNLS + 0x8000 * Apid + 0x1000 * UGG_SPMI_EE;
+  /*
+    Каналы: команда пишется в chnls, статус и данные читаются из obsrvr
+    (так устроен SPMI PMIC Arbiter v2 — "wr_base" и "rd_base" в драйвере).
+  */
+  Chan = 0x8000 * (UINTN)Apid + 0x1000 * UGG_SPMI_EE;
 
   /* CMD: EXT_READ (13), адрес регистра, 1 байт */
   Cmd = (UINT32)((13u << 27) | (((UINT32)Reg & 0xFFu) << 4) | 0u);
-  UggSpmiWr (Chan + 0x00, Cmd);
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x00, Cmd);
 
   for (I = 0; I < 100000; I++) {
-    Status = UggSpmiRd (Chan + 0x08);
+    Status = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x08);
     if ((Status & 0x1) != 0) {
       break;
     }
@@ -1505,7 +1512,7 @@ UggSpmiReadByte (
     return FALSE;
   }
 
-  *Value = (UINT8)(UggSpmiRd (Chan + 0x18) & 0xFF);
+  *Value = (UINT8)(UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x18) & 0xFF);
   return TRUE;
 }
 
@@ -1578,6 +1585,41 @@ UggSpmiProbe2 (
   UggPrintHex (360, "   val:", Val);
 }
 
+/*
+  Настоящая транзакция SPMI: читаем REVID у PMIC (sid 0, peripheral 0,
+  регистр 0x04). Если значение правдоподобное — шина и PMIC под нашим
+  контролем, и дальше можно включать регуляторы (питание eMMC) и PON (кнопки).
+*/
+STATIC
+VOID
+UggSpmiReadProbe (
+  VOID
+  )
+{
+  UINT8    Apid = 0xFF;
+  UINT8    Val = 0;
+  BOOLEAN  Found;
+  BOOLEAN  Ok;
+  UINT8    Idx;
+
+  Found = UggSpmiFindChannel (0, 0, &Apid);
+  UggDrawText (16, 300, "channel for ppid0:");
+  UggHex (176, 300, Found ? Apid : 0xFFFFFFFF);
+
+  Ok = UggSpmiReadByte (0, 0, 0x04, &Val);
+  UggDrawText (16, 320, "read revid:");
+  UggDrawText (128, 320, UggYesNo (Ok));
+  UggPrintHex (340, "revid:", Val);
+
+  for (Idx = 0; Idx < 8; Idx++) {
+    if (UggSpmiReadByte (0, 0, Idx, &Val)) {
+      UggHex (16 + Idx * 72, 360, Idx);
+      UggHex (48 + Idx * 72, 360, Val);
+    } else {
+      UggDrawText (16 + Idx * 72, 360, "--");
+    }
+  }
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1783,6 +1825,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 15) {
     UggSpmiProbe2 ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 16) {
+    UggSpmiReadProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
