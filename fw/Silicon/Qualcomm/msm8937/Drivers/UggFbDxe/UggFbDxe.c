@@ -1676,6 +1676,70 @@ UggSpmiLookupProbe (
   UggDrawText (16, Y + 30, "done:");
   UggDrawText (64, Y + 30, UggYesNo (Done));
 }
+/*
+  Транзакция SPMI по последовательности LK (spmi.c):
+
+    1. найти канал по PPID  (таблица дерева, сделано — apid 0x72 для PMIC top)
+    2. записать CONFIG = 0 в окно канала  (ОТКЛЮЧИТЬ IRQ-режим; мы этого не
+       делали, и, вероятно, поэтому команда «висела»)
+    3. записать CMD (opcode << 27 | offset << 4 | byte_count-1)
+    4. опросить STATUS (бит 0 = DONE) — читается из окна observer
+    5. прочитать RDATA0 (тоже из observer)
+
+  Одна попытка — чтобы при зависании не терять остальные данные.
+*/
+STATIC
+VOID
+UggSpmiXfer (
+  VOID
+  )
+{
+  UINT8    Apid = 0xFF;
+  UINTN    Chan;
+  UINTN    I;
+  UINT32   Cmd;
+  UINT32   Status;
+  UINT32   Data;
+  BOOLEAN  Found;
+
+  Found = UggSpmiFindChannel (0, 0, &Apid);
+  UggDrawText (16, 300, "apid:");
+  UggHex (64, 300, Found ? Apid : 0xFFFFFFFF);
+  if (!Found) {
+    return;
+  }
+
+  Chan = 0x8000 * (UINTN)Apid + 0x1000 * UGG_SPMI_EE;
+
+  /* 2) CONFIG = 0: режим опроса вместо прерываний */
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x04, 0);
+  UggDrawText (16, 320, "config cleared");
+
+  /* 3) CMD: EXT_READ(13), регистр 0x04, 1 байт */
+  Cmd = (UINT32)((13u << 27) | ((0x04u & 0xFFu) << 4) | 0u);
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x00, Cmd);
+  UggDrawText (16, 340, "cmd written");
+
+  /* 4) STATUS из окна observer */
+  Status = 0;
+  for (I = 0; I < 200000; I++) {
+    Status = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x08);
+    if ((Status & 0x1) != 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 360, "status:");
+  UggHex (88, 360, Status);
+  UggDrawText (16, 380, "done:");
+  UggDrawText (64, 380, (Status & 0x1) ? "YES" : "NO");
+
+  /* 5) RDATA0 */
+  Data = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x18);
+  UggDrawText (16, 400, "rdata:");
+  UggHex (80, 400, Data);
+  UggDrawText (16, 420, "pmic revid:");
+  UggHex (112, 420, Data & 0xFF);
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1889,6 +1953,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 17) {
     UggSpmiLookupProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 18) {
+    UggSpmiXfer ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
