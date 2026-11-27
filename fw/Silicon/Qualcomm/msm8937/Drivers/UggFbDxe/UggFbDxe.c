@@ -1740,6 +1740,62 @@ UggSpmiXfer (
   UggDrawText (16, 420, "pmic revid:");
   UggHex (112, 420, Data & 0xFF);
 }
+/*
+  Безопасная проба окна канала SPMI (только чтение).
+
+  Канал PMIC top: apid 0x72 -> смещение 0x8000 * 0x72 = 0x390000.
+  Читаем по три регистра в каждом окне (CMD/CONFIG/STATUS) и в observer.
+  Если чтения возвращаются — блок доступен и «вешает» именно запись CMD.
+  Если чтение зависает — окно недоступно (клок/владелец), и нужен другой путь.
+
+  Каждый шаг подписан ДО обращения, чтобы по экрану видеть, где остановились.
+*/
+STATIC
+VOID
+UggSpmiWindowProbe (
+  VOID
+  )
+{
+  UINTN   Chan = 0x8000 * 0x72;
+  UINT32  Val;
+  UINTN   Y = 300;
+
+  UggDrawText (16, 280, "channel 0x72 window, read only:");
+
+  /* окно записи (chnls) */
+  UggDrawText (16, Y, "chnls+0:");
+  Val = UggSpmiRd (UGG_SPMI_CHNLS + Chan + 0x00);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  UggDrawText (16, Y, "chnls+4:");
+  Val = UggSpmiRd (UGG_SPMI_CHNLS + Chan + 0x04);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  UggDrawText (16, Y, "chnls+8:");
+  Val = UggSpmiRd (UGG_SPMI_CHNLS + Chan + 0x08);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  /* окно наблюдения (obsrvr) */
+  UggDrawText (16, Y, "obsrv+0:");
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x00);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  UggDrawText (16, Y, "obsrv+8:");
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x08);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  UggDrawText (16, Y, "obsrv+18:");
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x18);
+  UggHex (104, Y, Val);
+  Y += 20;
+
+  UggDrawText (16, Y + 10, "all reads returned");
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1957,6 +2013,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 18) {
     UggSpmiXfer ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 19) {
+    UggSpmiWindowProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
