@@ -569,38 +569,27 @@ STATIC EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  mUggTextOut = {
   биты [4:3] = PULL (0b11 = pull-up), бит [9] = OE (0 = вход).
 */
 
+
+
+/*
+  Сканер кнопок (только чтение, никаких записей в TLMM — запись в CFG
+  произвольного пина может сломать систему).
+
+  Перебираем все пины, у которых FUNC_SEL == 0 (уже GPIO), запоминаем их
+  уровни и записываем, какой пин изменился. Показываем номер изменившегося
+  пина и счётчик изменений: так находится реальный пин кнопки, даже если
+  device tree указывает другой.
+*/
 STATIC
 VOID
-UggVolUpSetup (
+UggKeyScan (
   VOID
   )
 {
-  volatile UINT32  *Cfg = (volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
-
-  /* FUNC_SEL = 0 (GPIO), PULL = 0b11 (pull-up), OE = 0 (вход) */
-  *Cfg = 0x00000018;
-}
-
-
-STATIC
-VOID
-EFIAPI
-UggKeyPollCallback (
-  IN EFI_EVENT  Event,
-  IN VOID       *Context
-  )
-{
-  /*
-    Сканер кнопок: следим за уровнем всех GPIO, которые уже в режиме функции
-    GPIO (CFG[2:0] == 0 — их не трогаем), и запоминаем, какой пин изменился.
-    Так мы найдём реальный пин кнопки, даже если device tree указывает другой.
-
-    Показываем: номер последнего изменившегося пина (2 цифры) и счётчик (2 цифры).
-  */
-  STATIC UINT8   PrevLevel[128];
-  STATIC BOOLEAN PrevValid = FALSE;
-  STATIC UINTN   ChangedPin = 0;
-  STATIC UINTN   ChangeCount = 0;
+  STATIC UINT8                   PrevLevel[128];
+  STATIC BOOLEAN                 PrevValid = FALSE;
+  STATIC UINTN                   ChangedPin = 0;
+  STATIC UINTN                   ChangeCount = 0;
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
   UINTN                          Pin;
   UINT32                         Cfg;
@@ -611,7 +600,7 @@ UggKeyPollCallback (
 
     Cfg = Reg[0];
     if ((Cfg & 0x7) != 0) {
-      continue;                      /* пин занят периферией — не трогаем */
+      continue;                      /* пин занят периферией */
     }
     Level = Reg[1] & 0x1;
     if (PrevValid) {
@@ -631,6 +620,17 @@ UggKeyPollCallback (
   UggDrawChar (580, 200, '0' + ((ChangeCount / 100) % 10));
   UggDrawChar (600, 200, '0' + ((ChangeCount / 10) % 10));
   UggDrawChar (620, 200, '0' + (ChangeCount % 10));
+}
+
+STATIC
+VOID
+EFIAPI
+UggKeyPollCallback (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  UggKeyScan ();
 }
 
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
@@ -799,8 +799,6 @@ UggFbDxeInitialize (
 
   /* Заголовок — признак того, что драйвер дисплея и текстовый вывод живы. */
   UggDrawText (16, 4, "Ugg UEFI  MSM8940  Redmi Note 5A Prime");
-
-  UggVolUpSetup ();
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
     Status = gBS->CreateEvent (
