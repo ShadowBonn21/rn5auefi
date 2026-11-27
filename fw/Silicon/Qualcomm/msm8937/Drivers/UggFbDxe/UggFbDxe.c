@@ -568,14 +568,6 @@ STATIC EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  mUggTextOut = {
   QCOM TLMM (v1, msm8937): GPIO_CFG биты [2:0] = FUNC_SEL (0 = GPIO),
   биты [4:3] = PULL (0b11 = pull-up), бит [9] = OE (0 = вход).
 */
-STATIC
-UINT32
-UggVolUpCfg (
-  VOID
-  )
-{
-  return *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
-}
 
 STATIC
 VOID
@@ -589,19 +581,6 @@ UggVolUpSetup (
   *Cfg = 0x00000018;
 }
 
-STATIC
-UINTN
-UggVolUpPressed (
-  VOID
-  )
-{
-  /* TLMM: GPIO_CFG(n) по смещению 0x1000*(n+1), GPIO_IN_OUT = +0x4, бит 0 — уровень */
-  volatile UINT32  *Reg = (volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (UGG_VOLUP_GPIO + 1));
-  UINT32           Level = Reg[1] & 0x1;
-
-  /* active low: нажата, когда уровень 0 */
-  return (Level == 0) ? 1 : 0;
-}
 
 STATIC
 VOID
