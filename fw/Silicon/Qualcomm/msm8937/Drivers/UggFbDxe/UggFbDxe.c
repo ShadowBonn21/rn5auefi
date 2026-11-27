@@ -611,15 +611,47 @@ UggKeyPollCallback (
   IN VOID       *Context
   )
 {
-  UINTN                          Pressed = UggVolUpPressed ();
-  UINT32                         Cfg = UggVolUpCfg ();
-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
-  STATIC CONST CHAR8             Hex[] = "0123456789ABCDEF";
+  /*
+    Сканер кнопок: следим за уровнем всех GPIO, которые уже в режиме функции
+    GPIO (CFG[2:0] == 0 — их не трогаем), и запоминаем, какой пин изменился.
+    Так мы найдём реальный пин кнопки, даже если device tree указывает другой.
 
-  FbFillRect (600, 200, 120, 100, &Black);
-  UggDrawChar (600, 200, Pressed ? '1' : '0');          /* уровень пина */
-  UggDrawChar (620, 200, Hex[(Cfg >> 4) & 0xF]);        /* CFG, старший ниббл */
-  UggDrawChar (640, 200, Hex[Cfg & 0xF]);               /* CFG, младший ниббл */
+    Показываем: номер последнего изменившегося пина (2 цифры) и счётчик (2 цифры).
+  */
+  STATIC UINT8   PrevLevel[128];
+  STATIC BOOLEAN PrevValid = FALSE;
+  STATIC UINTN   ChangedPin = 0;
+  STATIC UINTN   ChangeCount = 0;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+  UINTN                          Pin;
+  UINT32                         Cfg;
+  UINT32                         Level;
+
+  for (Pin = 0; Pin < 122; Pin++) {
+    volatile UINT32  *Reg = (volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pin + 1));
+
+    Cfg = Reg[0];
+    if ((Cfg & 0x7) != 0) {
+      continue;                      /* пин занят периферией — не трогаем */
+    }
+    Level = Reg[1] & 0x1;
+    if (PrevValid) {
+      if ((UINT8)Level != PrevLevel[Pin]) {
+        ChangedPin = Pin;
+        ChangeCount++;
+      }
+    }
+    PrevLevel[Pin] = (UINT8)Level;
+  }
+  PrevValid = TRUE;
+
+  FbFillRect (500, 200, 160, 100, &Black);
+  UggDrawChar (500, 200, '0' + ((ChangedPin / 100) % 10));
+  UggDrawChar (520, 200, '0' + ((ChangedPin / 10) % 10));
+  UggDrawChar (540, 200, '0' + (ChangedPin % 10));
+  UggDrawChar (580, 200, '0' + ((ChangeCount / 100) % 10));
+  UggDrawChar (600, 200, '0' + ((ChangeCount / 10) % 10));
+  UggDrawChar (620, 200, '0' + (ChangeCount % 10));
 }
 
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
