@@ -818,6 +818,35 @@ UggSdccInit (
   UggPrintHex (480, "err status:", UggSdccRd (SDHCI_ERROR_INT_STAT));
 }
 
+/*
+  Дамп вендорских регистров SDCC (0x100..0x13C).
+
+  QCOM SDCC поверх SDHCI имеет собственный блок: режим (SDHCI / SDCC),
+  настройки DLL, задержки сэмплинга, выбор 1.8/3.3 В. Пока эти регистры не
+  настроены как ждёт наш SoC, команды не исполняются: CMD0 завершается
+  «тишиной» (нет ни complete, ни error). Печатаем дамп, чтобы понять режим.
+*/
+STATIC
+VOID
+UggSdccDump (
+  IN UINTN  Base
+  )
+{
+  UINTN   Row;
+  UINTN   Col;
+  UINT32  Val;
+  UINTN   Y = Base;
+
+  for (Row = 0; Row < 16; Row++) {
+    UggDrawText (16, Y, "100:");
+    for (Col = 0; Col < 4; Col++) {
+      Val = *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x100 + Row * 0x10 + Col * 4);
+      UggHex (64 + Col * 72, Y, Val);
+    }
+    Y += 20;
+  }
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -991,6 +1020,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 7) {
     UggSdccInit ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 8) {
+    UggSdccDump (300);
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
