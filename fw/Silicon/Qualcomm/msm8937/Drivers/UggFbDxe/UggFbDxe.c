@@ -1028,6 +1028,100 @@ UggSdccInit2 (
   UggPrintHex (500, "err status:", UggHcRd (0x32));
 }
 
+/*
+  Полная инициализация SDCC1 с обработкой питания (как в LK/WOA-драйвере).
+
+  Добавлено то, чего не хватало: после подачи питания на шину контроллер
+  выставляет BUS_ON в регистре PWRCTL_STATUS (core_mem + 0x0DC) и только
+  после этого исполняет команды. LK ждёт при этом прерывание; у нас
+  прерываний нет, поэтому просто опрашиваем статус.
+
+  Регистры питания (смещения внутри core_mem), взяты из платформенных PCD
+  драйвера WOA (Lumia950XLPkg, Shared.dsc.inc):
+    MCI_HC_MODE     0x078  (бит0 = SDHCI mode, бит13 = FF_CLK_SW_RST_DIS)
+    PWRCTL_STATUS   0x0DC  (бит0 = BUS_ON)
+    PWRCTL_MASK     0x0E0
+    PWRCTL_CLEAR    0x0E4
+    PWRCTL_CTL      0x0E8
+*/
+#define UGG_MCI_HC_MODE    0x078
+#define UGG_PWRCTL_STATUS  0x0DC
+#define UGG_PWRCTL_MASK    0x0E0
+#define UGG_PWRCTL_CLEAR   0x0E4
+#define UGG_PWRCTL_CTL     0x0E8
+
+STATIC
+VOID
+UggSdccInit3 (
+  VOID
+  )
+{
+  UINT32   Reg;
+  UINTN    I;
+  BOOLEAN  Ok;
+
+  /* 1) SDHCI-режим + запрет сброса клока */
+  Reg  = UggMciRd (UGG_MCI_HC_MODE);
+  Reg |= (1u << 0) | (1u << 13);
+  UggMciWr (UGG_MCI_HC_MODE, Reg);
+
+  /* 2) вендорский конфиг + разрешить прерывания питания в маске */
+  UggHcWr (0x10C, 0xA1C);
+  UggMciWr (UGG_PWRCTL_MASK, 0xF);
+
+  /* 3) сброс SDHCI */
+  UggHcWr16 (0x2F, 0x1);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2F) & 0x1) == 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 300, "reset:");
+  UggDrawText (72, 300, UggYesNo (I < 20000));
+
+  /* 4) клок: внутренний -> stable -> SD clock */
+  UggHcWr16 (0x2C, 0x0001);
+  for (I = 0; I < 20000; I++) {
+    if ((UggHcRd16 (0x2C) & 0x0002) != 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 320, "int clock:");
+  UggDrawText (112, 320, UggYesNo (I < 20000));
+  UggHcWr16 (0x2C, 0x0007);
+
+  /* 5) питание шины 3.3 В и ОЖИДАНИЕ BUS_ON в PWRCTL_STATUS */
+  UggMciWr (UGG_PWRCTL_CLEAR, 0xF);      /* сбросить старые статусы */
+  UggHcWr16 (0x29, 0x0F);                /* SD bus power on, 3.3 В */
+  for (I = 0; I < 200000; I++) {
+    Reg = UggMciRd (UGG_PWRCTL_STATUS);
+    if ((Reg & 0x1) != 0) {              /* BUS_ON */
+      break;
+    }
+  }
+  Ok = (I < 200000);
+  UggDrawText (16, 340, "bus power:");
+  UggDrawText (112, 340, UggYesNo (Ok));
+  UggPrintHex (360, "pwrctl status:", UggMciRd (UGG_PWRCTL_STATUS));
+  UggMciWr (UGG_PWRCTL_CLEAR, 0xF);      /* подтвердить */
+  UggPrintHex (380, "pwrctl ctl:", UggMciRd (UGG_PWRCTL_CTL));
+
+  /* 6) CMD0 */
+  UggHcWr (0x08, 0);
+  Ok = UggSdCmd (0x0000);
+  UggDrawText (16, 400, "CMD0:");
+  UggDrawText (80, 400, UggYesNo (Ok));
+  UggPrintHex (420, "int status:", UggHcRd (0x30));
+
+  /* 7) CMD1 — SEND_OP_COND, OCR */
+  UggHcWr (0x08, 0x40FF8080);
+  Ok = UggSdCmd (0x0102);
+  UggDrawText (16, 440, "CMD1:");
+  UggDrawText (80, 440, UggYesNo (Ok));
+  UggPrintHex (460, "OCR:", UggHcRd (0x10));
+  UggPrintHex (480, "err status:", UggHcRd (0x32));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -1209,6 +1303,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 9) {
     UggSdccInit2 ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 10) {
+    UggSdccInit3 ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
