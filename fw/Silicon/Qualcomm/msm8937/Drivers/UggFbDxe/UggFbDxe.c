@@ -1796,6 +1796,62 @@ UggSpmiWindowProbe (
 
   UggDrawText (16, Y + 10, "all reads returned");
 }
+/*
+  Пошаговая проверка ЗАПИСИ в окно канала SPMI (что именно роняет систему).
+
+  Из предыдущей пробы известно:
+    chnls+0x0 = 0x080004B0  (CMD, оставшийся от LK: opcode 1 = EXT_READL,
+                             offset 0x4B)
+    chnls+0x4 = 0            (CONFIG, IRQ-режим уже выключен)
+    chnls+0x8 = 0x1          (STATUS: DONE)
+
+  Шаги подписаны до выполнения, поэтому по экрану видно, на какой записи
+  устройство останавливается.
+*/
+STATIC
+VOID
+UggSpmiWriteProbe (
+  VOID
+  )
+{
+  UINTN   Chan = 0x8000 * 0x72;
+  UINT32  Val;
+
+  UggDrawText (16, 280, "write tests on channel 0x72:");
+
+  /* W1: вернуть CONFIG = 0 (значение не меняется — только проверка записи) */
+  UggDrawText (16, 300, "W1 config=0 ...");
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x04, 0);
+  UggDrawText (16, 320, "W1 done");
+
+  /* W2: переотправить РОВНО ту команду, что оставил LK (opcode 1, off 0x4B) */
+  UggDrawText (16, 340, "W2 cmd=080004B0 ...");
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x00, 0x080004B0);
+  UggDrawText (16, 360, "W2 done");
+
+  /* статус после записи (читаем из observer) */
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x08);
+  UggDrawText (16, 380, "status:");
+  UggHex (88, 380, Val);
+
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x18);
+  UggDrawText (16, 400, "rdata:");
+  UggHex (80, 400, Val);
+
+  /* W3: наша команда с opcode 1 (EXT_READL), регистр 0x04, 1 байт */
+  UggDrawText (16, 420, "W3 cmd=opcode1 off4 ...");
+  UggSpmiWr (UGG_SPMI_CHNLS + Chan + 0x00, (UINT32)((1u << 27) | (0x04u << 4)));
+  UggDrawText (16, 440, "W3 done");
+
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x08);
+  UggDrawText (16, 460, "status2:");
+  UggHex (96, 460, Val);
+  Val = UggSpmiRd (UGG_SPMI_OBSRVR + Chan + 0x18);
+  UggDrawText (16, 480, "rdata2:");
+  UggHex (96, 480, Val);
+  UggDrawText (16, 500, "revid:");
+  UggHex (72, 500, Val & 0xFF);
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -2017,6 +2073,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 19) {
     UggSpmiWindowProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 20) {
+    UggSpmiWriteProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
