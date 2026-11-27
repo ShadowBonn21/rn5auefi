@@ -2279,7 +2279,7 @@ UggFbDxeInitialize (
                   &mUggFb.Gop,
                   &gEfiSimpleTextOutProtocolGuid,
                   &mUggTextOut,
-                  &gEfiSimpleTextInputProtocolGuid,
+                  &gEfiSimpleTextInProtocolGuid,
                   &mUggConIn,
                   &gEfiDevicePathProtocolGuid,
                   (EFI_DEVICE_PATH_PROTOCOL *)mFbDevicePath,

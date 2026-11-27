@@ -31,7 +31,7 @@
 
 [Protocols]
   gEfiSimpleTextOutProtocolGuid
-  gEfiSimpleTextInputProtocolGuid
+  gEfiSimpleTextInProtocolGuid
   gEfiGraphicsOutputProtocolGuid        ## PRODUCES
   gEfiDevicePathProtocolGuid            ## PRODUCES
 
