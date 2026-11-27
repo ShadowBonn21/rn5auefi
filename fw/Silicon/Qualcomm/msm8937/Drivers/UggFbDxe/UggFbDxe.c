@@ -679,6 +679,145 @@ UggProbeSdcc (
   UggHex (176, 360, *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + 0x020));
 }
 
+/*
+  Инициализация SDCC1 (eMMC) по SDHCI — первый настоящий шаг драйвера eMMC.
+
+  Раскладка SDHCI (спецификация SD Host Controller 3.0), а не то, что я читал
+  раньше: CLOCK_CONTROL_OFFSET = 0x2C (0x20 — это buffer data port), POWER
+  Control = 0x29, Software Reset = 0x2F, Normal Int Status = 0x30.
+
+  Все ожидания ограничены по числу итераций: бесконечных циклов быть не должно,
+  иначе срабатывает watchdog и телефон перезагружается.
+
+    1. печать CLOCK_CONTROL и POWER_CONTROL (как есть после LK);
+    2. software reset ALL;
+    3. питание шины 3.3V;
+    4. включение внутреннего клока + SD-клока с делителем;
+    5. CMD0 (GO_IDLE_STATE) и ожидание command complete.
+*/
+#define SDHCI_CLOCK_CONTROL   0x2C
+#define SDHCI_POWER_CONTROL   0x29
+#define SDHCI_SW_RESET        0x2F
+#define SDHCI_NORMAL_INT_STAT 0x30
+#define SDHCI_ERROR_INT_STAT  0x32
+#define SDHCI_ARGUMENT        0x08
+#define SDHCI_COMMAND         0x0E
+#define SDHCI_PRESENT_STATE   0x24
+
+STATIC
+UINT32
+UggSdccRd (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + Off);
+}
+
+STATIC
+VOID
+UggSdccWr (
+  IN UINTN   Off,
+  IN UINT32  Value
+  )
+{
+  *(volatile UINT32 *)(UINTN)(UGG_SDCC1_BASE + Off) = Value;
+}
+
+STATIC
+UINT16
+UggSdccRd16 (
+  IN UINTN  Off
+  )
+{
+  return *(volatile UINT16 *)(UINTN)(UGG_SDCC1_BASE + Off);
+}
+
+STATIC
+VOID
+UggSdccWr16 (
+  IN UINTN   Off,
+  IN UINT16  Value
+  )
+{
+  *(volatile UINT16 *)(UINTN)(UGG_SDCC1_BASE + Off) = Value;
+}
+
+STATIC
+VOID
+UggPrintHex (
+  IN UINTN   Y,
+  IN CONST CHAR8  *Label,
+  IN UINT32  Value
+  )
+{
+  UggDrawText (16, Y, Label);
+  UggHex (200, Y, Value);
+}
+
+STATIC
+VOID
+UggSdccInit (
+  VOID
+  )
+{
+  UINT32  Reg;
+  UINTN   I;
+
+  UggPrintHex (300, "clock control:", UggSdccRd (SDHCI_CLOCK_CONTROL));
+  UggPrintHex (320, "power control:", UggSdccRd (SDHCI_POWER_CONTROL));
+  UggPrintHex (340, "present state:", UggSdccRd (SDHCI_PRESENT_STATE));
+
+  /* 1) software reset ALL */
+  UggSdccWr16 (SDHCI_SW_RESET, 0x1);
+  for (I = 0; I < 20000; I++) {
+    if ((UggSdccRd16 (SDHCI_SW_RESET) & 0x1) == 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 360, (I < 20000) ? "reset: OK" : "reset: TIMEOUT");
+
+  /* 2) питание шины 3.3V (SD_BUS_POWER=1, 3.3V = 0b111) */
+  UggSdccWr16 (SDHCI_POWER_CONTROL, 0x0F);
+  for (I = 0; I < 20000; I++) {
+    if ((UggSdccRd16 (SDHCI_POWER_CONTROL) & 0x01) != 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 380, (I < 20000) ? "power: OK" : "power: TIMEOUT");
+
+  /* 3) внутренний клок: enable -> ждём stable -> включаем SD clock */
+  UggSdccWr16 (SDHCI_CLOCK_CONTROL, 0x0001);
+  for (I = 0; I < 20000; I++) {
+    Reg = UggSdccRd16 (SDHCI_CLOCK_CONTROL) & 0x0002;
+    if (Reg != 0) {
+      break;
+    }
+  }
+  if (I >= 20000) {
+    UggDrawText (16, 400, "int clock: TIMEOUT");
+  } else {
+    UggDrawText (16, 400, "int clock: OK");
+    /* делитель по умолчанию (база/2) + SD clock enable */
+    UggSdccWr16 (SDHCI_CLOCK_CONTROL, 0x0007);
+    UggPrintHex (420, "clock now:", UggSdccRd (SDHCI_CLOCK_CONTROL));
+  }
+
+  /* 4) CMD0 — карта должна ответить "command complete" */
+  UggSdccWr (SDHCI_ARGUMENT, 0);
+  UggSdccWr16 (SDHCI_NORMAL_INT_STAT, 0xFFFF);      /* сбросить статусы */
+  UggSdccWr16 (SDHCI_ERROR_INT_STAT, 0xFFFF);
+  UggSdccWr16 (SDHCI_COMMAND, 0x0000);              /* CMD0, без ответа */
+  for (I = 0; I < 20000; I++) {
+    Reg = UggSdccRd16 (SDHCI_NORMAL_INT_STAT);
+    if ((Reg & 0x0001) != 0) {
+      break;
+    }
+  }
+  UggDrawText (16, 440, (I < 20000) ? "CMD0: OK" : "CMD0: TIMEOUT");
+  UggPrintHex (460, "int status:", UggSdccRd (SDHCI_NORMAL_INT_STAT));
+  UggPrintHex (480, "err status:", UggSdccRd (SDHCI_ERROR_INT_STAT));
+}
+
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -848,6 +987,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 6) {
     UggProbeSdcc ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 7) {
+    UggSdccInit ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
