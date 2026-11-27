@@ -2086,7 +2086,7 @@ UggConInReset (
     пустоту и крутятся в холостом цикле — вся система начинает тормозить.
   */
   if (mKeyWaitEvent != NULL) {
-    gBS->ClearEvent (mKeyWaitEvent);
+    gBS->CheckEvent (mKeyWaitEvent);
   }
   return EFI_SUCCESS;
 }
@@ -2101,7 +2101,7 @@ UggConInReadKeyStroke (
 {
   if (mKeyTail == mKeyHead) {
     if (mKeyWaitEvent != NULL) {
-      gBS->ClearEvent (mKeyWaitEvent);
+      gBS->CheckEvent (mKeyWaitEvent);
     }
     return EFI_NOT_READY;
   }
@@ -2110,7 +2110,7 @@ UggConInReadKeyStroke (
 
   /* Очередь опустела — обязательно снять сигнал события. */
   if ((mKeyTail == mKeyHead) && (mKeyWaitEvent != NULL)) {
-    gBS->ClearEvent (mKeyWaitEvent);
+    gBS->CheckEvent (mKeyWaitEvent);
   }
   return EFI_SUCCESS;
 }
