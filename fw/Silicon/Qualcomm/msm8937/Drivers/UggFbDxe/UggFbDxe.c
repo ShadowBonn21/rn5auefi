@@ -1643,7 +1643,7 @@ UggSpmiLookupProbe (
 
   UggDrawText (16, 280, "lookup ppid0, path:");
 
-  for (Step = 0; Step < 8 && !Done; Step++) {
+  for (Step = 0; Step < 20 && !Done; Step++) {
     Data = UggSpmiRd (UGG_SPMI_CNFG + 0x0B00 + Index * 4);
     Bit  = (Data >> 18) & 0xF;
 
