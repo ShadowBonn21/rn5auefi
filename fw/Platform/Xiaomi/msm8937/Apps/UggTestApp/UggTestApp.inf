@@ -1,0 +1,27 @@
+## @file
+#  UggTestApp — приложение-проверка загрузки EFI-образов из FV.
+#
+#  Copyright (c) 2026, UGG UEFI project. SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 1.29
+  BASE_NAME                      = UggTestApp
+  FILE_GUID                      = 7B3C1E52-9A4D-4C58-B0E7-2F1A6D3C5B90
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  UggTestApp.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  BaseLib
+  BaseMemoryLib

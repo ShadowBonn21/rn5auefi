@@ -69,6 +69,9 @@ GROUPS = {
         "MdeModulePkg/Bus/Usb/UsbMassStorageDxe/UsbMassStorageDxe.inf",
         "MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf",
     ],
+    "testapp": [
+        "Platform/Xiaomi/msm8937/Apps/UggTestApp/UggTestApp.inf",
+    ],
     "logo": [
         "Platform/RenegadePkg/Drivers/LogoDxe/LogoDxe.inf",
     ],
