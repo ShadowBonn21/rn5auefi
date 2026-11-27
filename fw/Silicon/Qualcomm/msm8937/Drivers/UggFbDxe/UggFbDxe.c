@@ -1852,6 +1852,56 @@ UggSpmiWriteProbe (
   UggDrawText (16, 500, "revid:");
   UggHex (72, 500, Val & 0xFF);
 }
+/*
+  Сверка адресации SPMI (только чтение).
+
+  1) Таблица REG_CHNL (core + 0x800 + 4*i): каждая запись кодирует
+     slave_id в битах [19:16] и pid в [15:8] для канала i. Если запись для
+     i = 0x72 содержит sid=0, pid=0 — канал PMIC top найден верно.
+  2) Сравниваем значения по адресу LK (core + 0xF800 + chnl*0x80) и по
+     адресу Linux v2 (chnls + 0x8000*chnl). Где лежит "настоящий" CMD —
+     там значения будут разными для разных каналов.
+*/
+STATIC
+VOID
+UggSpmiAddrProbe (
+  VOID
+  )
+{
+  UINTN   I;
+  UINT32  Val;
+  UINTN   Y = 300;
+
+  UggDrawText (16, 280, "reg_chnl table (sid/pid per channel):");
+  for (I = 0; I < 4; I++) {
+    /* смотрим каналы 0x70..0x73 */
+    Val = UggSpmiRd (UGG_SPMI_CORE + 0x800 + 4 * (0x70 + I));
+    UggDrawText (16, Y, "ch:");
+    UggHex (48, Y, 0x70 + I);
+    UggDrawText (112, Y, "sid/pid:");
+    UggHex (176, Y, Val);
+    Y += 20;
+  }
+
+  Y += 10;
+  UggDrawText (16, Y, "LK-style cmd addr:");
+  UggHex (168, Y, UggSpmiRd (UGG_SPMI_CORE + 0xF800 + 0x72 * 0x80));
+  Y += 20;
+  UggDrawText (16, Y, "LK-style status addr:");
+  UggHex (184, Y, UggSpmiRd (UGG_SPMI_CORE + 0xF808 + 0x72 * 0x80));
+  Y += 20;
+  UggDrawText (16, Y, "v2 chnls cmd:");
+  UggHex (128, Y, UggSpmiRd (UGG_SPMI_CHNLS + 0x8000 * 0x72 + 0x00));
+  Y += 20;
+  UggDrawText (16, Y, "v2 chnls status:");
+  UggHex (144, Y, UggSpmiRd (UGG_SPMI_CHNLS + 0x8000 * 0x72 + 0x08));
+  Y += 20;
+  UggDrawText (16, Y, "v2 chan 0x71 cmd:");
+  UggHex (152, Y, UggSpmiRd (UGG_SPMI_CHNLS + 0x8000 * 0x71 + 0x00));
+  Y += 20;
+  UggDrawText (16, Y, "v2 chan 0x73 cmd:");
+  UggHex (152, Y, UggSpmiRd (UGG_SPMI_CHNLS + 0x8000 * 0x73 + 0x00));
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
@@ -2077,6 +2127,10 @@ UggFbDxeInitialize (
 
   if (FixedPcdGet32 (PcdDebugStageBands) == 20) {
     UggSpmiWriteProbe ();
+  }
+
+  if (FixedPcdGet32 (PcdDebugStageBands) == 21) {
+    UggSpmiAddrProbe ();
   }
 
   if ((FixedPcdGet32 (PcdDebugStageBands) == 2) || (FixedPcdGet32 (PcdDebugStageBands) == 5)) {
