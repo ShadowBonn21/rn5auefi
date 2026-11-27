@@ -2080,6 +2080,14 @@ UggConInReset (
   )
 {
   mKeyTail = mKeyHead;
+  /*
+    Сбросить событие ожидания. Если этого не делать, после первого нажатия
+    событие остаётся сигнальным, ConSplitter/BDS «видят» клавишу, читают
+    пустоту и крутятся в холостом цикле — вся система начинает тормозить.
+  */
+  if (mKeyWaitEvent != NULL) {
+    gBS->ClearEvent (mKeyWaitEvent);
+  }
   return EFI_SUCCESS;
 }
 
@@ -2092,10 +2100,18 @@ UggConInReadKeyStroke (
   )
 {
   if (mKeyTail == mKeyHead) {
+    if (mKeyWaitEvent != NULL) {
+      gBS->ClearEvent (mKeyWaitEvent);
+    }
     return EFI_NOT_READY;
   }
-  *Key    = mKeyQueue[mKeyTail].Key;
+  *Key     = mKeyQueue[mKeyTail].Key;
   mKeyTail = (mKeyTail + 1) % UGG_KEY_QUEUE;
+
+  /* Очередь опустела — обязательно снять сигнал события. */
+  if ((mKeyTail == mKeyHead) && (mKeyWaitEvent != NULL)) {
+    gBS->ClearEvent (mKeyWaitEvent);
+  }
   return EFI_SUCCESS;
 }
 
