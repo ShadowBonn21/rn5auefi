@@ -20,6 +20,16 @@
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PcdLib.h>
+#include <Library/ArmLib.h>
+
+STATIC
+VOID
+UggFlushRect (
+  IN UINTN  X,
+  IN UINTN  Y,
+  IN UINTN  W,
+  IN UINTN  H
+  );
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/DevicePath.h>
@@ -146,6 +156,34 @@ FbFillRect (
       Ptr += 3;
     }
   }
+  UggFlushRect (X, Y, W, H);
+}
+
+/*
+  Сброс кэша данных для прямоугольника экрана.
+
+  Экран переведён в режим write-back: записи пикселей идут в кэш (быстро),
+  но сканирующий контроллер читает физическую память. Поэтому после каждой
+  отрисовки нужно «сбросить» (clean) затронутые строки кэша — иначе на экране
+  останутся старые пиксели.
+*/
+STATIC
+VOID
+UggFlushRect (
+  IN UINTN  X,
+  IN UINTN  Y,
+  IN UINTN  W,
+  IN UINTN  H
+  )
+{
+  UINTN  Stride = FixedPcdGet32 (PcdFbStride);
+  UINTN  Start  = FB_BASE + Y * Stride + X * 3;
+  UINTN  Len    = H * Stride;
+
+  if (Len == 0) {
+    return;
+  }
+  ArmCleanDataCacheRange (Start & ~0x3FULL, ((Len + 0x3F) & ~0x3FULL) + 0x40);
 }
 
 /**
@@ -340,6 +378,7 @@ UggDrawChar (
       FbPutPixel (X + Col, Y + Row, &Pixel);
     }
   }
+  UggFlushRect (X, Y, 8, 12);
 }
 
 STATIC

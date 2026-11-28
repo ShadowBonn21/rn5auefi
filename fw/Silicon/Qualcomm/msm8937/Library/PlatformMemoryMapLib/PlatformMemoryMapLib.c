@@ -47,7 +47,7 @@ STATIC ARM_MEMORY_REGION_DESCRIPTOR_EX gDeviceMemoryDescriptorEx[] = {
   // ВАЖНО: начинаем на 0x8FFF0000, а не с 0x90000000 — драйвер рисует с
   // 0x8FFFFF00 (сдвиг сканирования MDSS 256 байт). Не отображённые страницы
   // дали бы data abort на первой же записи пикселя.
-  {"Display Reserved",  0x8FFF0000, 0x01500000, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH_XN},
+  {"Display Reserved",  0x8FFF0000, 0x01500000, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_BACK_XN},
 
   /* ─── DDR: верхнее окно ──────────────────────────────────────────────── */
   {"DXE Heap",          0x92000000, 0x0E000000, AddMem, SYS_MEM, SYS_MEM_CAP, Conv,   WRITE_BACK_XN},
