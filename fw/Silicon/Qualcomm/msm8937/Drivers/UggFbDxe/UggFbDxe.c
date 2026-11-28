@@ -2388,40 +2388,63 @@ UggReadCntFreq (
   return (UINT32)Val;
 }
 
+/*
+  Измерение: отдельно ИНТЕРВАЛ между вызовами и ДЛИТЕЛЬНОСТЬ самого вызова.
+
+    interval = t(вход) - t(предыдущий вход)
+    duration = t(вход) - t(предыдущий вход)  ... вычитаем время прошлого вызова
+
+  Рисуем раз в 50 вызовов, чтобы само рисование не искажало замер.
+*/
+STATIC UINT64 mPrevEntry = 0;
+STATIC UINT64 mPrevExit  = 0;
+STATIC UINT32 mCalls     = 0;
+
 STATIC
 VOID
 UggTimerMeasure (
   VOID
   )
 {
-  UINT64  Now;
-  UINT32  Ms;
+  UINT64  Entry;
+  UINT32  IntervalMs;
+  UINT32  DurationMs;
 
   if (mCntFreq == 0) {
-    mCntFreq = UggReadCntFreq ();
-    mLastCnt = UggReadCnt ();
+    mCntFreq  = UggReadCntFreq ();
+    mPrevEntry = UggReadCnt ();
+    mPrevExit  = mPrevEntry;
     return;
   }
 
-  Now = UggReadCnt ();
-  if (Now > mLastCnt) {
-    Ms = (UINT32)(((Now - mLastCnt) * 1000ULL) / (UINT64)mCntFreq);
-    mLastMs = Ms;
-    if (Ms > mMaxMs) {
-      mMaxMs = Ms;
-    }
-    UggDrawText (16, 380, "poll interval, ms:");
-    UggDrawChar (216, 380, (CHAR8)('0' + (mLastMs / 1000) % 10));
-    UggDrawChar (236, 380, (CHAR8)('0' + (mLastMs / 100) % 10));
-    UggDrawChar (256, 380, (CHAR8)('0' + (mLastMs / 10) % 10));
-    UggDrawChar (276, 380, (CHAR8)('0' + mLastMs % 10));
-    UggDrawText (16, 400, "max interval, ms:");
-    UggDrawChar (200, 400, (CHAR8)('0' + (mMaxMs / 1000) % 10));
-    UggDrawChar (220, 400, (CHAR8)('0' + (mMaxMs / 100) % 10));
-    UggDrawChar (240, 400, (CHAR8)('0' + (mMaxMs / 10) % 10));
-    UggDrawChar (260, 400, (CHAR8)('0' + mMaxMs % 10));
+  Entry = UggReadCnt ();
+  mCalls++;
+
+  IntervalMs = (UINT32)(((Entry - mPrevEntry) * 1000ULL) / (UINT64)mCntFreq);
+  DurationMs = (UINT32)(((mPrevEntry - mPrevExit) * 1000ULL) / (UINT64)mCntFreq);
+
+  mPrevEntry = Entry;
+
+  if ((mCalls % 50) == 0) {
+    UggDrawText (16, 380, "interval ms:");
+    UggDrawChar (128, 380, (CHAR8)('0' + (IntervalMs / 1000) % 10));
+    UggDrawChar (148, 380, (CHAR8)('0' + (IntervalMs / 100) % 10));
+    UggDrawChar (168, 380, (CHAR8)('0' + (IntervalMs / 10) % 10));
+    UggDrawChar (188, 380, (CHAR8)('0' + IntervalMs % 10));
+    UggDrawText (16, 400, "callback ms:");
+    UggDrawChar (128, 400, (CHAR8)('0' + (DurationMs / 1000) % 10));
+    UggDrawChar (148, 400, (CHAR8)('0' + (DurationMs / 100) % 10));
+    UggDrawChar (168, 400, (CHAR8)('0' + (DurationMs / 10) % 10));
+    UggDrawChar (188, 400, (CHAR8)('0' + DurationMs % 10));
+    UggDrawText (16, 420, "calls:");
+    UggDrawChar (72, 420, (CHAR8)('0' + (mCalls / 10000) % 10));
+    UggDrawChar (92, 420, (CHAR8)('0' + (mCalls / 1000) % 10));
+    UggDrawChar (112, 420, (CHAR8)('0' + (mCalls / 100) % 10));
+    UggDrawChar (132, 420, (CHAR8)('0' + (mCalls / 10) % 10));
+    UggDrawChar (152, 420, (CHAR8)('0' + mCalls % 10));
   }
-  mLastCnt = Now;
+
+  mPrevExit = UggReadCnt ();
 }
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
