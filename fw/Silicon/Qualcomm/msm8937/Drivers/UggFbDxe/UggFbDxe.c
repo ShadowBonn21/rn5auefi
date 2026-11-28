@@ -2165,6 +2165,12 @@ STATIC UINTN                             mPollGap = 0;
 STATIC UINTN                             mHoldTicks = 0;
 STATIC BOOLEAN                           mHoldFired = FALSE;
 
+STATIC
+VOID
+UggTimerMeasure (
+  VOID
+  );
+
 /* Опрос кнопок: чтение уровней 88..94 и превращение изменений в нажатия. */
 STATIC
 VOID
