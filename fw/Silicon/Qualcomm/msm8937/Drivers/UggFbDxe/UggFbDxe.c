@@ -2116,6 +2116,29 @@ UggConInReadKeyStroke (
 }
 
 /* Нарисовать меню: три пункта, подсветка '>' и отмеченный выбор. */
+/*
+  Меню рисуется один раз; при листании двигается ТОЛЬКО маркер ">".
+
+  Видеопамять некэшируемая: один символ — ~96 отдельных записей в память.
+  Полная перерисовка меню (десятки символов) занимала секунды и создавала
+  очередь нажатий, которые потом «догоняли». Два символа — мгновенно.
+*/
+STATIC UINTN  mMarkerDrawn = 0xFFFF;
+
+STATIC
+VOID
+UggMoveMarker (
+  IN UINTN  OldIndex,
+  IN UINTN  NewIndex
+  )
+{
+  if (OldIndex < 3) {
+    UggDrawChar (32, 600 + OldIndex * 24, ' ');
+  }
+  UggDrawChar (32, 600 + NewIndex * 24, '>');
+  mMarkerDrawn = NewIndex;
+}
+
 STATIC
 VOID
 UggDrawMenu (
@@ -2129,16 +2152,13 @@ UggDrawMenu (
   };
   UINTN  I;
 
-  UggDrawText (16, 560, "---- UGG MENU (buttons) ----");
+  UggDrawText (16, 560, "-- UGG MENU --");
   for (I = 0; I < 3; I++) {
-    UggDrawText (32, 600 + I * 24, (I == mMenuIndex) ? ">" : " ");
     UggDrawText (48, 600 + I * 24, Items[I]);
-    if (I == mMenuChosen) {
-      UggDrawText (240, 600 + I * 24, "<- selected");
-    }
   }
-  UggDrawText (16, 700, "press VOL+ / VOL- to move");
-  UggDrawText (16, 720, "press POWER to select");
+  UggMoveMarker (0xFFFF, mMenuIndex);
+  UggDrawText (16, 700, "short press: next");
+  UggDrawText (16, 720, "hold 1.2s: select");
 }
 
 STATIC UINTN                             mPollGap = 0;
@@ -2205,23 +2225,15 @@ UggKeysPoll (
       mPollGap++;
     }
 
-    if (Changed && (mKeyNowLevel == 0) && (mPollGap > 3)) {
-      mPollGap     = 0;
-      mHoldTicks   = 0;
-      mHoldFired   = FALSE;
-      mMenuIndex   = (mMenuIndex + 1) % 3;
-      UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
-      UggDrawMenu ();
+    if (Changed && (mKeyNowLevel == 0) && (mPollGap > 2)) {
+      UINTN  OldIndex = mMenuIndex;
 
-      UggDrawText (16, 420, "changed pin:");
-      UggDrawChar (152, 420, (CHAR8)('0' + (mKeyChangedPin / 100) % 10));
-      UggDrawChar (172, 420, (CHAR8)('0' + (mKeyChangedPin / 10) % 10));
-      UggDrawChar (192, 420, (CHAR8)('0' + mKeyChangedPin % 10));
-      UggDrawText (16, 440, "presses:");
-      UggDrawChar (104, 440, (CHAR8)('0' + (mKeyPressCount / 1000) % 10));
-      UggDrawChar (124, 440, (CHAR8)('0' + (mKeyPressCount / 100) % 10));
-      UggDrawChar (144, 440, (CHAR8)('0' + (mKeyPressCount / 10) % 10));
-      UggDrawChar (164, 440, (CHAR8)('0' + mKeyPressCount % 10));
+      mPollGap   = 0;
+      mHoldTicks = 0;
+      mHoldFired = FALSE;
+      mMenuIndex = (mMenuIndex + 1) % 3;
+      UggKeyPush (0x02, 0x0000);                 /* SCAN_DOWN */
+      UggMoveMarker (OldIndex, mMenuIndex);      /* только 2 символа */
     }
 
     if (AnyLow) {
@@ -2231,7 +2243,7 @@ UggKeysPoll (
           mHoldFired  = TRUE;
           mMenuChosen = mMenuIndex;
           UggKeyPush (0x17, 0x000D);             /* Enter */
-          UggDrawMenu ();
+          UggDrawText (16, 660, "selected!");
         }
       }
     } else {
@@ -2439,7 +2451,7 @@ UggFbDxeInitialize (
 
     gBS->CreateEvent (EVT_TIMER | EVT_NOTIFY_SIGNAL, TPL_CALLBACK, UggKeysPollCallback, NULL, &TimerEvent);
     if (TimerEvent != NULL) {
-      gBS->SetTimer (TimerEvent, TimerPeriodic, 1000000);   /* 100 мс */
+      gBS->SetTimer (TimerEvent, TimerPeriodic, 500000);   /* 50 мс */
     }
   }
 
