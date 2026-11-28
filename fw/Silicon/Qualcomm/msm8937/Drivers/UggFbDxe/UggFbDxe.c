@@ -20,18 +20,20 @@
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PcdLib.h>
-
+#include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/DevicePath.h>
 #include <Protocol/GraphicsOutput.h>
 
-STATIC
-VOID
-UggCleanCacheRange (
-  IN UINTN  Start,
-  IN UINTN  Len
-  );
+/*
+  Прототип: сброс кэша для прямоугольника экрана.
 
+  Экран переведён в режим write-back (см. PlatformMemoryMapLib): записи
+  пикселей попадают в кэш — это в десятки раз быстрее, чем write-through,
+  из-за которого один символ рисовался ~0.1 с (замерено: интервал опроса
+  кнопок 5860 мс вместо 50 мс). Но сканирующий контроллер читает физическую
+  память, поэтому после отрисовки нужно очистить строки кэша (DC CVAC).
+*/
 STATIC
 VOID
 UggFlushRect (
@@ -162,22 +164,11 @@ FbFillRect (
       Ptr += 3;
     }
   }
-  UggFlushRect (X, Y, W, H);
+
+  UggFlushRect (X, Y, Width, Height);
 }
 
-/*
-  Сброс кэша данных для прямоугольника экрана.
-
-  Экран переведён в режим write-back: записи пикселей идут в кэш (быстро),
-  но сканирующий контроллер читает физическую память. Поэтому после каждой
-  отрисовки нужно «сбросить» (clean) затронутые строки кэша — иначе на экране
-  останутся старые пиксели.
-/*
-  Очистка кэша данных для диапазона (DC CVAC = clean by VA to point of
-  coherency). Экран в режиме write-back: записи пикселей идут в кэш, что в
-  десятки раз быстрее write-through; после отрисовки сбрасываем строки кэша,
-  чтобы контроллер сканирования увидел новые пиксели.
-*/
+/* Очистка кэша данных для диапазона: DC CVAC (clean by VA to PoC). */
 STATIC
 VOID
 UggCleanCacheRange (
@@ -195,7 +186,7 @@ UggCleanCacheRange (
   __asm__ __volatile__ ("dsb sy" ::: "memory");
 }
 
-*/
+/* Сбросить кэш для прямоугольника (X,Y,W,H) в пикселях 24bpp. */
 STATIC
 VOID
 UggFlushRect (
@@ -207,12 +198,12 @@ UggFlushRect (
 {
   UINTN  Stride = FixedPcdGet32 (PcdFbStride);
   UINTN  Start  = FB_BASE + Y * Stride + X * 3;
-  UINTN  Len    = H * Stride;
 
-  if (Len == 0) {
+  if ((W == 0) || (H == 0)) {
     return;
   }
-  UggCleanCacheRange (Start, Len);
+  /* диапазон «от первой строки до последней» — включает промежутки строк */
+  UggCleanCacheRange (Start, (H - 1) * Stride + W * 3);
 }
 
 /**
@@ -407,6 +398,7 @@ UggDrawChar (
       FbPutPixel (X + Col, Y + Row, &Pixel);
     }
   }
+
   UggFlushRect (X, Y, 8, 12);
 }
 
