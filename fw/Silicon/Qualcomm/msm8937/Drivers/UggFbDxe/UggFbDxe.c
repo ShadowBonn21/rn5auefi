@@ -2177,6 +2177,8 @@ UggKeysPoll (
   UINT32  Level;
   BOOLEAN Changed = FALSE;
 
+  UggTimerMeasure ();
+
   for (Idx = 0; Idx < UGG_KEY_COUNT; Idx++) {
     Pin   = UGG_KEY_FIRST + Idx;
     Level = *(volatile UINT32 *)(UINTN)(UGG_TLMM_BASE + 0x1000 * (Pin + 1) + 4) & 1;
@@ -2280,6 +2282,81 @@ UggInputInit (
   UggDrawMenu ();
 }
 
+/*
+  Измерение реального интервала опроса кнопок.
+
+  Читаем аппаратный счётчик ARM (CNTVCT_EL0) и его частоту (CNTFRQ_EL0).
+  В каждом колбэке таймера считаем, сколько миллисекунд прошло с прошлого
+  вызова, и показываем число на экране.
+
+  Это отвечает на главный вопрос: таймер действительно работает каждые
+  50 мс, или платформа растягивает его до секунд (тогда «медленность»
+  не в отрисовке, а в разрешении таймера).
+*/
+STATIC UINT64  mLastCnt = 0;
+STATIC UINT32  mCntFreq = 0;
+STATIC UINT32  mLastMs  = 0;
+STATIC UINT32  mMaxMs   = 0;
+
+STATIC
+UINT64
+UggReadCnt (
+  VOID
+  )
+{
+  UINT64  Val;
+
+  __asm__ __volatile__ ("mrs %0, cntvct_el0" : "=r" (Val));
+  return Val;
+}
+
+STATIC
+UINT32
+UggReadCntFreq (
+  VOID
+  )
+{
+  UINT64  Val;
+
+  __asm__ __volatile__ ("mrs %0, cntfrq_el0" : "=r" (Val));
+  return (UINT32)Val;
+}
+
+STATIC
+VOID
+UggTimerMeasure (
+  VOID
+  )
+{
+  UINT64  Now;
+  UINT32  Ms;
+
+  if (mCntFreq == 0) {
+    mCntFreq = UggReadCntFreq ();
+    mLastCnt = UggReadCnt ();
+    return;
+  }
+
+  Now = UggReadCnt ();
+  if (Now > mLastCnt) {
+    Ms = (UINT32)(((Now - mLastCnt) * 1000ULL) / (UINT64)mCntFreq);
+    mLastMs = Ms;
+    if (Ms > mMaxMs) {
+      mMaxMs = Ms;
+    }
+    UggDrawText (16, 380, "poll interval, ms:");
+    UggDrawChar (216, 380, (CHAR8)('0' + (mLastMs / 1000) % 10));
+    UggDrawChar (236, 380, (CHAR8)('0' + (mLastMs / 100) % 10));
+    UggDrawChar (256, 380, (CHAR8)('0' + (mLastMs / 10) % 10));
+    UggDrawChar (276, 380, (CHAR8)('0' + mLastMs % 10));
+    UggDrawText (16, 400, "max interval, ms:");
+    UggDrawChar (200, 400, (CHAR8)('0' + (mMaxMs / 1000) % 10));
+    UggDrawChar (220, 400, (CHAR8)('0' + (mMaxMs / 100) % 10));
+    UggDrawChar (240, 400, (CHAR8)('0' + (mMaxMs / 10) % 10));
+    UggDrawChar (260, 400, (CHAR8)('0' + mMaxMs % 10));
+  }
+  mLastCnt = Now;
+}
 /* Точка входа: НЕ static — edk2 генерирует для неё внешний прототип из INF. */
 EFI_STATUS
 EFIAPI
