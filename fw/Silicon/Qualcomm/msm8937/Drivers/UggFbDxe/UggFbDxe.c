@@ -20,7 +20,17 @@
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PcdLib.h>
-#include <Library/ArmLib.h>
+
+#include <Library/UefiLib.h>
+#include <Protocol/DevicePath.h>
+#include <Protocol/GraphicsOutput.h>
+
+STATIC
+VOID
+UggCleanCacheRange (
+  IN UINTN  Start,
+  IN UINTN  Len
+  );
 
 STATIC
 VOID
@@ -30,10 +40,6 @@ UggFlushRect (
   IN UINTN  W,
   IN UINTN  H
   );
-#include <Library/UefiBootServicesTableLib.h>
-#include <Library/UefiLib.h>
-#include <Protocol/DevicePath.h>
-#include <Protocol/GraphicsOutput.h>
 
 /* Порядок байтов в памяти: 0 = R,G,B ; 1 = B,G,R. Уточняется PCD. */
 #define FB_ORDER_RGB  0
@@ -166,6 +172,29 @@ FbFillRect (
   но сканирующий контроллер читает физическую память. Поэтому после каждой
   отрисовки нужно «сбросить» (clean) затронутые строки кэша — иначе на экране
   останутся старые пиксели.
+/*
+  Очистка кэша данных для диапазона (DC CVAC = clean by VA to point of
+  coherency). Экран в режиме write-back: записи пикселей идут в кэш, что в
+  десятки раз быстрее write-through; после отрисовки сбрасываем строки кэша,
+  чтобы контроллер сканирования увидел новые пиксели.
+*/
+STATIC
+VOID
+UggCleanCacheRange (
+  IN UINTN  Start,
+  IN UINTN  Len
+  )
+{
+  UINTN  Addr = Start & ~0x3FULL;
+  UINTN  End  = Start + Len;
+
+  while (Addr < End) {
+    __asm__ __volatile__ ("dc cvac, %0" :: "r" (Addr) : "memory");
+    Addr += 64;
+  }
+  __asm__ __volatile__ ("dsb sy" ::: "memory");
+}
+
 */
 STATIC
 VOID
@@ -183,7 +212,7 @@ UggFlushRect (
   if (Len == 0) {
     return;
   }
-  ArmCleanDataCacheRange (Start & ~0x3FULL, ((Len + 0x3F) & ~0x3FULL) + 0x40);
+  UggCleanCacheRange (Start, Len);
 }
 
 /**

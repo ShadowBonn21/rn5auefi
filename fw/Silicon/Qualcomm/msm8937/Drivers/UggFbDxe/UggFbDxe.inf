@@ -28,7 +28,6 @@
   BaseMemoryLib
   MemoryAllocationLib
   PcdLib
-  ArmLib
 
 [Protocols]
   gEfiSimpleTextOutProtocolGuid
